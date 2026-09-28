@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Génère index-full.html : index.html avec style.css et les scripts intégrés dans un seul fichier."""
+"""Generates index-full.html: index.html with style.css and the scripts inlined into a single file."""
 import re
 from pathlib import Path
 
@@ -26,4 +26,4 @@ html = re.sub(r'<link rel="stylesheet" href="(?!https?:)([^"]+)">', inline_css, 
 html = re.sub(r'<script src="(?!https?:)([^"]+)"></script>', inline_js, html)
 
 OUT.write_text(html, encoding="utf-8")
-print(f"{OUT.name} : {len(html.encode()) // 1024} Ko")
+print(f"{OUT.name}: {len(html.encode()) // 1024} KB")

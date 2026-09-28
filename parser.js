@@ -1,5 +1,5 @@
-/* Tresse — lecture des journaux : formats d'horodatage, niveaux, identifiants.
-   Aucune dépendance ; fonctionne dans le navigateur comme sous Node. */
+/* Tresse — log parsing: timestamp formats, levels, identifiers.
+   No dependencies; runs in the browser as well as under Node. */
 (function (root) {
   'use strict';
 
@@ -9,7 +9,7 @@
 
   function fracMs(f) { return f ? Number('0.' + f) * 1000 : 0; }
 
-  // Décalage explicite en minutes, ou null si la ligne n'en donne pas.
+  // Explicit offset in minutes, or null if the line does not give one.
   function zoneMin(z) {
     if (!z) return null;
     if (z === 'Z' || z === 'UTC' || z === 'GMT') return 0;
@@ -19,8 +19,8 @@
     return m[1] === '-' ? -v : v;
   }
 
-  // Composantes calendaires -> millisecondes epoch.
-  // zone : décalage lu dans la ligne ; tz : réglage de la source ('local' ou minutes).
+  // Calendar components -> epoch milliseconds.
+  // zone: offset read from the line; tz: the source's setting ('local' or minutes).
   function epoch(y, mo, d, h, mi, s, ms, zone, tz) {
     if (zone == null && tz !== 'local') zone = tz;
     if (zone == null) return new Date(y, mo, d, h, mi, s).getTime() + ms;
@@ -54,15 +54,15 @@
       },
     },
     {
-      id: 'eu', label: 'JJ/MM/AAAA hh:mm:ss',
+      id: 'eu', label: 'DD/MM/YYYY hh:mm:ss',
       re: /(?<!\d)(\d{2})[\/.](\d{2})[\/.](\d{4})[ T,]+(\d{2}):(\d{2}):(\d{2})(?:[.,](\d{1,9}))?/,
       read(m, c) {
         return { t: epoch(+m[3], m[2] - 1, +m[1], +m[4], +m[5], +m[6], fracMs(m[7]), null, c.tz), zoned: false };
       },
     },
     {
-      // Redis : « pid:rôle JJ Mon AAAA hh:mm:ss.mmm <niveau> message », niveau parmi . - * #
-      id: 'redis', label: 'Redis (JJ Mon AAAA hh:mm:ss)',
+      // Redis: “pid:role DD Mon YYYY hh:mm:ss.mmm <level> message”, level among . - * #
+      id: 'redis', label: 'Redis (DD Mon YYYY hh:mm:ss)',
       re: /(?<!\d)(\d{1,2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?!\d)(?: ([.*#-])(?= ))?/,
       read(m, c) {
         const mo = MON[m[2].toLowerCase()];
@@ -74,9 +74,9 @@
       },
     },
     {
-      // Redis < 5 : pas d'année, « pid:rôle JJ Mon hh:mm:ss.mmm » (3.x, 4.x) ou « [pid] JJ Mon … » (2.x).
-      // Le préfixe est exigé pour ne pas confondre avec une date quelconque dans le texte.
-      id: 'redis-old', label: 'Redis < 5 (JJ Mon hh:mm:ss)', needs: 'year',
+      // Redis < 5: no year, “pid:role DD Mon hh:mm:ss.mmm” (3.x, 4.x) or “[pid] DD Mon …” (2.x).
+      // The prefix is required so it is not mistaken for an arbitrary date in the text.
+      id: 'redis-old', label: 'Redis < 5 (DD Mon hh:mm:ss)', needs: 'year',
       re: /(?:^|\s)(?:\[\d+\]|\d+:[XCSM]) (\d{1,2}) ([A-Za-z]{3}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?!\d)(?: ([.*#-])(?= ))?/,
       read(m, c) {
         const mo = MON[m[2].toLowerCase()];
@@ -110,7 +110,7 @@
       },
     },
     {
-      id: 'epoch', label: 'Timestamp Unix',
+      id: 'epoch', label: 'Unix timestamp',
       re: /^\s*\[?(\d{13}(?:\.\d+)?|\d{10}(?:\.\d{1,9})?)(?!\d)/,
       read(m) {
         const v = Number(m[1]);
@@ -118,7 +118,7 @@
       },
     },
     {
-      id: 'time', label: 'Heure seule', needs: 'date',
+      id: 'time', label: 'Time only', needs: 'date',
       re: /^\[?(\d{2}):(\d{2}):(\d{2})(?:[.,](\d{1,9}))?(?!\d)/,
       read(m, c) {
         const [y, mo, d] = refDate(c);
@@ -127,7 +127,7 @@
     },
   ];
 
-  const JSON_FMT = { id: 'json', label: 'JSON (un évènement par ligne)' };
+  const JSON_FMT = { id: 'json', label: 'JSON (one event per line)' };
   const ALL = [JSON_FMT].concat(FORMATS);
   const TIME_KEYS = ['@timestamp', 'timestamp', 'time', 'ts', 'datetime', 'date', 't', 'eventTime', 'asctime'];
   const LEVEL_KEYS = ['level', 'severity', 'lvl', 'levelname', 'log.level', 'loglevel'];
@@ -163,8 +163,8 @@
     return r;
   }
 
-  // Ligne que le format principal ne reconnaît pas (fichier aux formats mêlés) : on essaie les autres,
-  // à condition que l'horodatage soit en tête de ligne, pour ne pas découper une trace qui cite une date.
+  // Line the main format does not recognize (mixed-format file): try the others,
+  // provided the timestamp is at the start of the line, so a stack trace quoting a date is not split up.
   const FALLBACK_AT = 40;
   function tryOthers(main, line, c) {
     for (const f of ALL) {
@@ -233,7 +233,7 @@
     return best < 0 ? null : ALL[best];
   }
 
-  /* ---------- Identifiants partagés ---------- */
+  /* ---------- Shared identifiers ---------- */
 
   const ID_RES = [
     [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, false],
@@ -270,7 +270,7 @@
     return 'id';
   }
 
-  /* ---------- Source complète ---------- */
+  /* ---------- Whole source ---------- */
 
   function parseSource(text, opts) {
     const c = { tz: opts && opts.tz != null ? opts.tz : 'local', date: opts && opts.date };
@@ -289,7 +289,7 @@
       if (r) {
         let t = r.t;
         if (roll && !r.fmt) {
-          // Journaux sans date : un retour en arrière de plus de 12 h signale un passage à minuit.
+          // Logs without a date: going back more than 12 h means midnight was crossed.
           if (t + shift < prev - DAY / 2) shift += DAY;
           t += shift;
           prev = t;

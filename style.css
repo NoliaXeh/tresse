@@ -99,7 +99,7 @@ kbd {
   background: var(--surface);
 }
 
-/* ---------- En-tête ---------- */
+/* ---------- Header ---------- */
 .top {
   display: flex;
   align-items: center;
@@ -153,7 +153,7 @@ kbd {
 .banner p { flex: 1 1 480px; max-width: 110ch; }
 .banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* ---------- Disposition ---------- */
+/* ---------- Layout ---------- */
 .layout {
   flex: 1;
   min-height: 0;
@@ -171,7 +171,7 @@ kbd {
 .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .privacy { color: var(--muted); font-size: 12px; margin-top: auto; padding-top: 8px; }
 
-/* ---------- Cartes source ---------- */
+/* ---------- Source cards ---------- */
 .source-list { display: flex; flex-direction: column; gap: 10px; }
 .src {
   background: var(--surface);
@@ -254,7 +254,7 @@ kbd {
 .off-ctl input.nonzero { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .off-ctl .unit { font: 11.5px var(--mono); color: var(--muted); }
 
-/* ---------- Barre d'outils ---------- */
+/* ---------- Toolbar ---------- */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -295,7 +295,7 @@ kbd {
 .mini select { font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); border-radius: 5px; padding: 3px 4px; color: var(--ink); }
 .mini.check { cursor: pointer; }
 
-/* ---------- Tresse ---------- */
+/* ---------- Braid ---------- */
 .braid-wrap { padding: 10px 16px 4px; border-bottom: 1px solid var(--line-soft); }
 #braid { display: block; width: 100%; height: 90px; cursor: crosshair; touch-action: none; }
 .braid-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; }
@@ -325,7 +325,7 @@ kbd {
 .pill button { border: 0; background: transparent; cursor: pointer; color: var(--muted); padding: 0 5px; font-size: 14px; line-height: 1; }
 .pill button:hover { color: var(--ink); }
 
-/* ---------- Lignes ---------- */
+/* ---------- Rows ---------- */
 .viewport { flex: 1; min-height: 0; overflow: auto; position: relative; outline-offset: -2px; }
 .spacer { position: relative; min-width: 100%; }
 .rows { position: absolute; top: 0; left: 0; min-width: 100%; }
@@ -390,7 +390,7 @@ mark.tok:hover { text-decoration-color: var(--accent); color: var(--accent); }
 mark.tok.on { background: var(--accent); color: var(--accent-ink); border-radius: 3px; text-decoration: none; }
 mark.hl { background: var(--hl); border-radius: 2px; }
 
-/* ---------- Panneau latéral ---------- */
+/* ---------- Side panel ---------- */
 .tabs { display: flex; border-bottom: 1px solid var(--line); flex: none; }
 .tabs button {
   flex: 1;
@@ -505,7 +505,7 @@ mark.hl { background: var(--hl); border-radius: 2px; }
 .d-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .d-note { font-size: 12px; color: var(--muted); }
 
-/* ---------- État vide ---------- */
+/* ---------- Empty state ---------- */
 .empty {
   margin: auto;
   max-width: 62ch;
@@ -520,7 +520,7 @@ mark.hl { background: var(--hl); border-radius: 2px; }
 .format-list b { font-weight: 600; }
 .format-list code { font: 11.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---------- Dialogue, dépôt, toast ---------- */
+/* ---------- Dialog, drop zone, toast ---------- */
 .dialog {
   width: min(680px, calc(100% - 32px));
   border: 1px solid var(--line);
@@ -573,7 +573,7 @@ mark.hl { background: var(--hl); border-radius: 2px; }
   box-shadow: var(--shadow);
 }
 
-/* ---------- Petits écrans ---------- */
+/* ---------- Small screens ---------- */
 @media (max-width: 1180px) {
   .layout { grid-template-columns: 270px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
   .side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }

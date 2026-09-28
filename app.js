@@ -1,4 +1,4 @@
-/* Tresse — interface : fusion, liste virtualisée, tresse, fils communs, calage d'horloge. */
+/* Tresse — UI: merging, virtualized list, braid, shared threads, clock alignment. */
 (function () {
   'use strict';
 
@@ -6,7 +6,7 @@
   const RH = 22;
   const LANE = 10;
   const COLORS = ['#4C7EF3', '#E8773A', '#1FAE7E', '#B05BD6', '#D9A21B', '#1BA5BF', '#D9467A', '#7FA32E'];
-  const LEVELS = [['error', 'Erreurs'], ['warn', 'Avert.'], ['info', 'Info'], ['debug', 'Debug'], ['other', 'Autres']];
+  const LEVELS = [['error', 'Errors'], ['warn', 'Warn'], ['info', 'Info'], ['debug', 'Debug'], ['other', 'Other']];
   const LV_SHORT = { error: 'ERR', warn: 'WARN', info: 'INFO', debug: 'DBG', other: '·' };
   const FORMAT_EXAMPLES = {
     json: '{"level":30,"time":1790596931482,"msg":"…"}',
@@ -24,13 +24,13 @@
   const $ = s => document.querySelector(s);
   const p2 = n => String(n).padStart(2, '0');
   const p3 = n => String(n).padStart(3, '0');
-  const nf = n => n.toLocaleString('fr-FR');
+  const nf = n => n.toLocaleString('en-US');
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const inIframe = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
 
   const store = {
     get(k, d) { try { const v = localStorage.getItem('tresse.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem('tresse.' + k, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ } },
+    set(k, v) { try { localStorage.setItem('tresse.' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
   };
 
   const els = {};
@@ -52,9 +52,9 @@
   };
   let uid = 0, colorIdx = 0, pasteN = 0;
 
-  /* ---------- Temps ---------- */
+  /* ---------- Time ---------- */
 
-  const TZ_OPTS = [['local', 'Heure locale du navigateur'], ['0', 'UTC']];
+  const TZ_OPTS = [['local', 'Browser local time'], ['0', 'UTC']];
   for (let h = -12; h <= 14; h++) if (h) TZ_OPTS.push([String(h * 60), `UTC${h > 0 ? '+' : '−'}${p2(Math.abs(h))}:00`]);
 
   function parts(t) {
@@ -67,8 +67,9 @@
     return `${p2(p[3])}:${p2(p[4])}:${p2(p[5])}` + (ms ? '.' + p3(p[6]) : '');
   }
   function dayKey(t) { const p = parts(t); return p[0] * 10000 + p[1] * 100 + p[2]; }
-  function dayLabel(t) {
-    return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: state.displayTz === 'utc' ? 'UTC' : undefined }).format(new Date(t));
+  function dayLabel(t, short = false) {
+    const o = short ? { day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    return new Intl.DateTimeFormat('en-US', Object.assign(o, { timeZone: state.displayTz === 'utc' ? 'UTC' : undefined })).format(new Date(t));
   }
   function zoneLabel(t) {
     if (state.displayTz === 'utc') return 'UTC';
@@ -84,10 +85,10 @@
     const a = Math.abs(ms);
     if (a < 1) return Math.round(a * 1000) + ' µs';
     if (a < 1000) return Math.round(a) + ' ms';
-    if (a < 60000) return (a / 1000).toLocaleString('fr-FR', { maximumFractionDigits: a < 10000 ? 2 : 1 }) + ' s';
+    if (a < 60000) return (a / 1000).toLocaleString('en-US', { maximumFractionDigits: a < 10000 ? 2 : 1 }) + ' s';
     if (a < 3600000) return Math.floor(a / 60000) + ' min ' + p2(Math.floor(a % 60000 / 1000)) + ' s';
     if (a < 86400000) return Math.floor(a / 3600000) + ' h ' + p2(Math.floor(a % 3600000 / 60000)) + ' min';
-    return Math.floor(a / 86400000) + ' j ' + Math.floor(a % 86400000 / 3600000) + ' h';
+    return Math.floor(a / 86400000) + ' d ' + Math.floor(a % 86400000 / 3600000) + ' h';
   }
   const sdur = ms => (ms < 0 ? '−' : '+') + dur(ms);
   function compactDt(dt) {
@@ -166,7 +167,7 @@
     if (state.token && !m.has(state.token)) { state.token = null; state.threadOnly = false; }
   }
 
-  /* ---------- Filtres et lignes ---------- */
+  /* ---------- Filters and rows ---------- */
 
   function matchText(e) {
     if (state.qre) {
@@ -223,7 +224,7 @@
     els.btnUnzoom.hidden = !state.range;
   }
 
-  /* ---------- Rendu des lignes ---------- */
+  /* ---------- Row rendering ---------- */
 
   function isWord(c) { return c !== undefined && /[\w]/.test(c); }
 
@@ -268,7 +269,7 @@
   function rowHtml(r, i) {
     const top = i * RH;
     if (r.k === 'd') return `<div class="row day" style="top:${top}px"><span class="meta"><span class="gut"></span><span class="label">${esc(dayLabel(r.t))} · ${zoneLabel(r.t)}</span></span></div>`;
-    if (r.k === 'g') return `<div class="row gap" style="top:${top}px"><span class="meta"><span class="gut"></span><span class="label">${dur(r.dt)} sans activité</span></span></div>`;
+    if (r.k === 'g') return `<div class="row gap" style="top:${top}px"><span class="meta"><span class="gut"></span><span class="label">${dur(r.dt)} without activity</span></span></div>`;
     const e = r.e, s = e.src;
     const cls = ['row', 'lv-' + e.level];
     if (e === state.selected) cls.push('sel');
@@ -326,7 +327,7 @@
   function revealEntry(e, flash = true) {
     let i = state.rowOf.get(e);
     if (i == null) {
-      // L'entrée est masquée par un filtre : on retire les filtres qui l'excluent.
+      // The entry is hidden by a filter: clear the filters that exclude it.
       state.q = ''; state.qre = null; els.search.value = ''; els.search.classList.remove('bad'); els.searchErr.hidden = true;
       state.levels = new Set(LEVELS.map(l => l[0]));
       if (state.range && (e.te < state.range[0] || e.te > state.range[1])) state.range = null;
@@ -337,7 +338,7 @@
     if (i != null) scrollToRow(i, flash ? e : null);
   }
 
-  /* ---------- Résumé et niveaux ---------- */
+  /* ---------- Summary and levels ---------- */
 
   function renderLevels() {
     const cnt = {};
@@ -348,21 +349,21 @@
 
   function renderSummary() {
     const f = state.filtered, m = state.merged;
-    if (!m.length) { els.summary.innerHTML = '<span>Aucune ligne horodatée pour l\'instant.</span>'; return; }
+    if (!m.length) { els.summary.innerHTML = '<span>No timestamped lines yet.</span>'; return; }
     const nErr = f.reduce((n, e) => n + (e.level === 'error'), 0);
     const a = f.length ? f[0].te : 0, b = f.length ? f[f.length - 1].te : 0;
-    let h = `<span><b>${nf(f.length)}</b> entrée${f.length > 1 ? 's' : ''}${f.length !== m.length ? ` sur ${nf(m.length)}` : ''}</span>`;
+    let h = `<span><b>${nf(f.length)}</b> entr${f.length === 1 ? 'y' : 'ies'}${f.length !== m.length ? ` of ${nf(m.length)}` : ''}</span>`;
     if (f.length) h += `<span>${clock(a, false)} → ${clock(b, false)} (${dur(b - a)})</span>`;
-    h += `<span class="errn">${nf(nErr)} erreur${nErr > 1 ? 's' : ''}</span>`;
-    if (state.range) h += `<span class="pill">Plage ${clock(state.range[0])} → ${clock(state.range[1])}<button type="button" data-clear="range" aria-label="Retirer la plage">×</button></span>`;
-    if (state.threadOnly && state.token) h += `<span class="pill">Fil ${esc(short(state.token))}<button type="button" data-clear="thread" aria-label="Afficher tous les fils">×</button></span>`;
-    if (state.anchor) h += `<span class="pill">T0 ${clock(state.anchor.te)} · ${esc(state.anchor.src.name)}<button type="button" data-clear="anchor" aria-label="Retirer T0">×</button></span>`;
+    h += `<span class="errn">${nf(nErr)} error${nErr === 1 ? '' : 's'}</span>`;
+    if (state.range) h += `<span class="pill">Range ${clock(state.range[0])} → ${clock(state.range[1])}<button type="button" data-clear="range" aria-label="Clear range">×</button></span>`;
+    if (state.threadOnly && state.token) h += `<span class="pill">Thread ${esc(short(state.token))}<button type="button" data-clear="thread" aria-label="Show all threads">×</button></span>`;
+    if (state.anchor) h += `<span class="pill">T0 ${clock(state.anchor.te)} · ${esc(state.anchor.src.name)}<button type="button" data-clear="anchor" aria-label="Clear T0">×</button></span>`;
     els.summary.innerHTML = h;
   }
 
   const short = t => t.length > 22 ? t.slice(0, 10) + '…' + t.slice(-6) : t;
 
-  /* ---------- La tresse (canvas) ---------- */
+  /* ---------- The braid (canvas) ---------- */
 
   let binsKey = '', bins = null, hoverX = null, drag = null;
   const BRAID = { lane: 18, axis: 22, labelW: 92 };
@@ -424,7 +425,7 @@
     g.font = '11px ' + col('--mono');
     g.textBaseline = 'middle';
 
-    // Graduations
+    // Ticks
     const step = niceStep(b - a, Math.max(2, PW / 95));
     const t0 = Math.ceil(a / step) * step;
     g.fillStyle = FAINT;
@@ -434,7 +435,7 @@
       g.fillStyle = LINE;
       g.fillRect(px - 0.5, 0, 1, lanes * BRAID.lane);
       g.fillStyle = FAINT;
-      const lab = step >= 864e5 ? dayLabel(t).split(' ').slice(1, 3).join(' ') : clock(t, step < 1000);
+      const lab = step >= 864e5 ? dayLabel(t, true) : clock(t, step < 1000);
       g.fillText(lab, Math.min(Math.max(px, L + 30), W - 34), lanes * BRAID.lane + 11);
     }
 
@@ -470,7 +471,7 @@
 
     const LH = lanes * BRAID.lane;
 
-    // Fenêtre visible dans la liste
+    // Window visible in the list
     const w = visibleWindow();
     if (w && !(w[1] < a || w[0] > b)) {
       const x0 = Math.max(L, x(w[0])), x1 = Math.min(L + PW, Math.max(x(w[1]), x0 + 2));
@@ -483,7 +484,7 @@
       g.strokeRect(Math.round(x0) + 0.5, 0.5, Math.max(1, Math.round(x1 - x0) - 1), LH - 1);
     }
 
-    // Occurrences du fil choisi
+    // Occurrences of the selected thread
     if (state.token) {
       const tk = state.tokens.get(state.token);
       if (tk) {
@@ -503,7 +504,7 @@
       g.setLineDash([]);
     }
 
-    // Sélection en cours
+    // Selection in progress
     if (drag && Math.abs(drag.x1 - drag.x0) > 3) {
       const x0 = Math.max(L, Math.min(drag.x0, drag.x1)), x1 = Math.min(L + PW, Math.max(drag.x0, drag.x1));
       g.fillStyle = ACC;
@@ -512,7 +513,7 @@
       g.globalAlpha = 1;
     }
 
-    // Survol
+    // Hover
     if (hoverX != null && hoverX >= L) {
       const px = Math.round(Math.min(hoverX, L + PW)) + 0.5;
       g.strokeStyle = INK;
@@ -569,7 +570,7 @@
   });
   els.braid.addEventListener('pointercancel', () => { drag = null; scheduleBraid(); });
 
-  /* ---------- Fils communs ---------- */
+  /* ---------- Shared threads ---------- */
 
   function renderThreads() {
     els.threadsCount.textContent = state.shared.length ? nf(state.shared.length) : '';
@@ -578,10 +579,10 @@
     const cap = 250;
     let h = list.slice(0, cap).map(r => {
       const dots = [...r.srcs].sort((x, y) => x.idx - y.idx).map(s => `<i style="--c:${s.color}" title="${esc(s.name)}"></i>`).join('');
-      return `<li><button type="button" class="${r.tok === state.token ? 'on' : ''}" data-tok="${esc(r.tok)}"><span class="tk">${r.err ? '<span class="e" title="Lié à une erreur"></span>' : ''}${esc(r.tok)}</span><span class="dots">${dots}</span><span class="tn">${r.entries.length}</span></button></li>`;
+      return `<li><button type="button" class="${r.tok === state.token ? 'on' : ''}" data-tok="${esc(r.tok)}"><span class="tk">${r.err ? '<span class="e" title="Tied to an error"></span>' : ''}${esc(r.tok)}</span><span class="dots">${dots}</span><span class="tn">${r.entries.length}</span></button></li>`;
     }).join('');
-    if (list.length > cap) h += `<li class="more">${nf(list.length - cap)} autres fils. Filtrez pour les trouver.</li>`;
-    if (!list.length) h = `<li class="more">${state.shared.length ? 'Aucun fil ne correspond.' : 'Aucun identifiant commun à plusieurs sources pour l\'instant.'}</li>`;
+    if (list.length > cap) h += `<li class="more">${nf(list.length - cap)} more threads. Filter to find them.</li>`;
+    if (!list.length) h = `<li class="more">${state.shared.length ? 'No thread matches.' : 'No identifier shared by several sources yet.'}</li>`;
     els.threadList.innerHTML = h;
     renderJourney();
   }
@@ -594,12 +595,12 @@
       const text = e.line.length > 160 ? e.line.slice(0, 160) + '…' : e.line;
       return `<li class="lv-${e.level}" data-j="${i}" style="--c:${e.src.color}"><span class="jd"></span><span class="jt">${compactDt(e.te - first)}</span><span class="jm"><span class="js">${esc(e.src.name)}</span><span class="lvb lv-${e.level}">${LV_SHORT[e.level]}</span><span class="jx">${esc(text)}</span></span></li>`;
     }).join('');
-    els.journey.innerHTML = `<section class="journey" aria-label="Parcours du fil">
-      <div class="j-top"><span class="tok">${esc(tk.tok)}</span><button type="button" class="ico" id="j-close" aria-label="Fermer le fil">×</button></div>
-      <p class="j-sum">${nf(tk.entries.length)} ligne${tk.entries.length > 1 ? 's' : ''} · ${tk.srcs.size} sources · durée ${dur(last - first)}</p>
-      <label class="switch"><input type="checkbox" id="j-only" ${state.threadOnly ? 'checked' : ''}> N'afficher que ce fil dans le journal</label>
+    els.journey.innerHTML = `<section class="journey" aria-label="Thread journey">
+      <div class="j-top"><span class="tok">${esc(tk.tok)}</span><button type="button" class="ico" id="j-close" aria-label="Close thread">×</button></div>
+      <p class="j-sum">${nf(tk.entries.length)} line${tk.entries.length === 1 ? '' : 's'} · ${tk.srcs.size} sources · duration ${dur(last - first)}</p>
+      <label class="switch"><input type="checkbox" id="j-only" ${state.threadOnly ? 'checked' : ''}> Show only this thread in the log</label>
       <ol class="j-steps">${steps}</ol>
-      ${tk.entries.length > 120 ? `<p class="j-sum">120 premières lignes affichées.</p>` : ''}
+      ${tk.entries.length > 120 ? `<p class="j-sum">Showing the first 120 lines.</p>` : ''}
     </section>`;
   }
 
@@ -642,7 +643,7 @@
     if (ev.target.id === 'j-only') { state.threadOnly = ev.target.checked; applyFilters(); els.viewport.scrollTop = 0; renderRows(); drawBraid(); }
   });
 
-  /* ---------- Détail ---------- */
+  /* ---------- Details ---------- */
 
   function showTab(which) {
     const t = which === 'detail';
@@ -663,26 +664,26 @@
 
   function renderDetail() {
     const e = state.selected;
-    if (!e) { els.detail.innerHTML = '<p class="muted">Cliquez sur une ligne pour voir son détail. Les flèches ↑ ↓ parcourent le journal.</p>'; return; }
+    if (!e) { els.detail.innerHTML = '<p class="muted">Click a line to see its details. The ↑ ↓ arrows browse the log.</p>'; return; }
     const s = e.src;
     const text = e.cont ? e.line + '\n' + e.cont.join('\n') : e.line;
-    const ids = e.ids.map(t => `<button type="button" data-tok="${esc(t)}" class="${state.sharedSet.has(t) ? 'shared' : ''}" title="${state.sharedSet.has(t) ? 'Présent dans plusieurs sources' : 'Présent dans une seule source'}">${esc(t)}</button>`).join('');
+    const ids = e.ids.map(t => `<button type="button" data-tok="${esc(t)}" class="${state.sharedSet.has(t) ? 'shared' : ''}" title="${state.sharedSet.has(t) ? 'Present in several sources' : 'Present in a single source'}">${esc(t)}</button>`).join('');
     const a = state.anchor;
-    let dl = `<dt>Heure</dt><dd>${fullStamp(e.te)}</dd>`;
-    if (s.offset) dl += `<dt>Horloge source</dt><dd>${clock(e.t)} (décalage ${s.offset > 0 ? '+' : '−'}${nf(Math.abs(s.offset))} ms)</dd>`;
-    if (a && a !== e) dl += `<dt>Depuis T0</dt><dd>${sdur(e.te - a.te)}</dd>`;
-    dl += `<dt>Ligne</dt><dd>${nf(e.n)} de ${esc(s.name)}</dd>`;
-    let actions = `<button type="button" class="btn small" data-act="anchor">${a === e ? 'Retirer T0' : 'Définir comme T0'}</button>`;
-    if (a && a !== e && a.src !== e.src) actions += `<button type="button" class="btn small" data-act="align" title="Décale toute la source « ${esc(s.name)} » pour que cette ligne tombe sur T0">Caler « ${esc(s.name)} » sur T0</button>`;
-    actions += `<button type="button" class="btn small ghost" data-act="copy">Copier</button>`;
+    let dl = `<dt>Time</dt><dd>${fullStamp(e.te)}</dd>`;
+    if (s.offset) dl += `<dt>Source clock</dt><dd>${clock(e.t)} (offset ${s.offset > 0 ? '+' : '−'}${nf(Math.abs(s.offset))} ms)</dd>`;
+    if (a && a !== e) dl += `<dt>Since T0</dt><dd>${sdur(e.te - a.te)}</dd>`;
+    dl += `<dt>Line</dt><dd>${nf(e.n)} of ${esc(s.name)}</dd>`;
+    let actions = `<button type="button" class="btn small" data-act="anchor">${a === e ? 'Clear T0' : 'Set as T0'}</button>`;
+    if (a && a !== e && a.src !== e.src) actions += `<button type="button" class="btn small" data-act="align" title="Shifts the whole “${esc(s.name)}” source so that this line falls on T0">Align “${esc(s.name)}” to T0</button>`;
+    actions += `<button type="button" class="btn small ghost" data-act="copy">Copy</button>`;
     els.detail.innerHTML = `<div class="detail">
       <div class="d-head"><span class="tag" style="--c:${s.color}">${esc(s.name)}</span><span class="lvb lv-${e.level}">${LV_SHORT[e.level]}</span></div>
       <dl>${dl}</dl>
       <pre class="d-text">${esc(text)}</pre>
-      ${ids ? `<div><p class="muted small">Identifiants repérés</p><div class="d-ids">${ids}</div></div>` : ''}
+      ${ids ? `<div><p class="muted small">Detected identifiers</p><div class="d-ids">${ids}</div></div>` : ''}
       <div class="d-actions">${actions}</div>
-      ${a && a !== e && a.src !== e.src ? `<p class="d-note">T0 est une ligne de ${esc(a.src.name)}. Si ces deux lignes décrivent le même instant, « Caler » corrige l'écart d'horloge entre les deux sources.</p>` : ''}
-      ${!a ? '<p class="d-note">Astuce : définissez T0 sur une ligne, puis choisissez sur une autre source la ligne qui correspond au même instant pour caler leurs horloges.</p>' : ''}
+      ${a && a !== e && a.src !== e.src ? `<p class="d-note">T0 is a line from ${esc(a.src.name)}. If these two lines describe the same moment, “Align” corrects the clock drift between the two sources.</p>` : ''}
+      ${!a ? '<p class="d-note">Tip: set T0 on a line, then pick the line from another source that matches the same moment to align their clocks.</p>' : ''}
     </div>`;
   }
 
@@ -699,9 +700,9 @@
       rebuild();
       renderSources();
       revealEntry(e);
-      toast(`« ${e.src.name} » décalé de ${delta > 0 ? '+' : '−'}${nf(Math.abs(delta))} ms. Décalage total : ${nf(e.src.offset)} ms.`);
+      toast(`“${e.src.name}” shifted by ${delta > 0 ? '+' : '−'}${nf(Math.abs(delta))} ms. Total offset: ${nf(e.src.offset)} ms.`);
     } else if (b.dataset.act === 'copy') {
-      copyText(e.cont ? e.line + '\n' + e.cont.join('\n') : e.line, 'Ligne copiée.');
+      copyText(e.cont ? e.line + '\n' + e.cont.join('\n') : e.line, 'Line copied.');
     }
   });
 
@@ -710,7 +711,7 @@
     renderSummary(); renderRows(); renderDetail(); drawBraid();
   }
 
-  /* ---------- Panneau des sources ---------- */
+  /* ---------- Sources panel ---------- */
 
   function tzOptions(sel) {
     return TZ_OPTS.map(([v, l]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${l}</option>`).join('');
@@ -721,30 +722,30 @@
     els.sourceList.innerHTML = state.sources.map(s => {
       const r = s.parsed;
       const meta = r.entries.length
-        ? `${nf(r.entries.length)} entrées · ${esc(r.formatLabel)}${r.orphans ? ` · ${nf(r.orphans)} ligne${r.orphans > 1 ? 's' : ''} avant le premier horodatage` : ''}`
-        : `<span class="warn-text">Aucun horodatage reconnu dans ${nf(r.lineCount)} lignes.</span>`;
+        ? `${nf(r.entries.length)} entr${r.entries.length === 1 ? 'y' : 'ies'} · ${esc(r.formatLabel)}${r.orphans ? ` · ${nf(r.orphans)} line${r.orphans === 1 ? '' : 's'} before the first timestamp` : ''}`
+        : `<span class="warn-text">No timestamp recognized in ${nf(r.lineCount)} lines.</span>`;
       const zoned = r.zoned > 0.9;
       const tz = zoned
-        ? `<label>Fuseau<span class="fixed">lu dans les journaux</span></label>`
-        : `<label>Fuseau<select data-act="tz" id="tz-${s.id}">${tzOptions(s.tz)}</select></label>`;
-      const date = r.needs ? `<label>${r.needs === 'year' ? 'Année / date' : 'Date'}<input type="date" data-act="date" id="date-${s.id}" value="${s.date}"></label>` : '';
+        ? `<label>Time zone<span class="fixed">read from the logs</span></label>`
+        : `<label>Time zone<select data-act="tz" id="tz-${s.id}">${tzOptions(s.tz)}</select></label>`;
+      const date = r.needs ? `<label>${r.needs === 'year' ? 'Year / date' : 'Date'}<input type="date" data-act="date" id="date-${s.id}" value="${s.date}"></label>` : '';
       return `<article class="src${s.visible ? '' : ' off'}" data-id="${s.id}" style="--c:${s.color}">
         <div class="src-top">
-          <button type="button" class="swatch" data-act="color" title="Changer la couleur" aria-label="Changer la couleur de ${esc(s.name)}"></button>
-          <input class="src-name" data-act="name" id="name-${s.id}" value="${esc(s.name)}" aria-label="Nom de la source" spellcheck="false">
-          <button type="button" class="ico" data-act="vis" aria-pressed="${s.visible}" title="${s.visible ? 'Masquer' : 'Afficher'} cette source">${s.visible ? 'Masquer' : 'Afficher'}</button>
-          <button type="button" class="ico" data-act="del" title="Retirer cette source">Retirer</button>
+          <button type="button" class="swatch" data-act="color" title="Change color" aria-label="Change the color of ${esc(s.name)}"></button>
+          <input class="src-name" data-act="name" id="name-${s.id}" value="${esc(s.name)}" aria-label="Source name" spellcheck="false">
+          <button type="button" class="ico" data-act="vis" aria-pressed="${s.visible}" title="${s.visible ? 'Hide' : 'Show'} this source">${s.visible ? 'Hide' : 'Show'}</button>
+          <button type="button" class="ico" data-act="del" title="Remove this source">Remove</button>
         </div>
         <p class="src-meta">${meta}</p>
         ${r.entries.length ? `<div class="src-grid">${tz}${date}</div>
-        <div class="offset"><span class="lbl">Décalage d'horloge</span>
+        <div class="offset"><span class="lbl">Clock offset</span>
           <div class="off-ctl">
-            <button type="button" data-act="nudge" data-v="-1000" aria-label="Moins une seconde">−1s</button>
-            <button type="button" data-act="nudge" data-v="-100" aria-label="Moins 100 millisecondes">−100</button>
-            <input type="number" step="1" data-act="offset" id="off-${s.id}" value="${s.offset}" class="${s.offset ? 'nonzero' : ''}" aria-label="Décalage en millisecondes">
+            <button type="button" data-act="nudge" data-v="-1000" aria-label="Minus one second">−1s</button>
+            <button type="button" data-act="nudge" data-v="-100" aria-label="Minus 100 milliseconds">−100</button>
+            <input type="number" step="1" data-act="offset" id="off-${s.id}" value="${s.offset}" class="${s.offset ? 'nonzero' : ''}" aria-label="Offset in milliseconds">
             <span class="unit">ms</span>
-            <button type="button" data-act="nudge" data-v="100" aria-label="Plus 100 millisecondes">+100</button>
-            <button type="button" data-act="nudge" data-v="1000" aria-label="Plus une seconde">+1s</button>
+            <button type="button" data-act="nudge" data-v="100" aria-label="Plus 100 milliseconds">+100</button>
+            <button type="button" data-act="nudge" data-v="1000" aria-label="Plus one second">+1s</button>
           </div>
         </div>` : ''}
       </article>`;
@@ -769,14 +770,14 @@
     } else if (act === 'del') {
       if (!b.classList.contains('confirm')) {
         b.classList.add('confirm');
-        b.textContent = 'Confirmer';
-        setTimeout(() => { if (b.isConnected) { b.classList.remove('confirm'); b.textContent = 'Retirer'; } }, 3000);
+        b.textContent = 'Confirm';
+        setTimeout(() => { if (b.isConnected) { b.classList.remove('confirm'); b.textContent = 'Remove'; } }, 3000);
         return;
       }
       state.sources = state.sources.filter(x => x !== s);
       if (!state.sources.some(x => x.demo)) state.demo = false;
       renderSources(); rebuild();
-      toast(`Source « ${s.name} » retirée.`);
+      toast(`Source “${s.name}” removed.`);
     } else if (act === 'nudge') {
       setOffset(s, s.offset + Number(b.dataset.v));
     }
@@ -794,7 +795,7 @@
     const t = ev.target;
     if (t.dataset.act !== 'name') return;
     const s = srcOf(t);
-    s.name = t.value || 'sans nom';
+    s.name = t.value || 'unnamed';
     renderRows(); drawBraid(); renderThreads(); renderDetail(); renderSummary();
   });
 
@@ -813,7 +814,7 @@
     return null;
   }
 
-  /* ---------- Ajout de journaux ---------- */
+  /* ---------- Adding logs ---------- */
 
   function dropDemo() {
     if (!state.demo) return false;
@@ -830,9 +831,10 @@
     rebuild();
     const n = added.reduce((k, s) => k + s.entries.length, 0);
     const bad = added.filter(s => !s.entries.length).map(s => s.name);
-    let msg = added.length === 1 ? `« ${added[0].name} » ajoutée : ${nf(n)} entrées.` : `${added.length} sources ajoutées : ${nf(n)} entrées.`;
-    if (bad.length) msg += ` Aucun horodatage reconnu dans ${bad.join(', ')}.`;
-    if (removed) msg += ' L\'exemple a été retiré.';
+    const ent = `${nf(n)} entr${n === 1 ? 'y' : 'ies'}`;
+    let msg = added.length === 1 ? `“${added[0].name}” added: ${ent}.` : `${added.length} sources added: ${ent}.`;
+    if (bad.length) msg += ` No timestamp recognized in ${bad.join(', ')}.`;
+    if (removed) msg += ' The sample was removed.';
     toast(msg);
   }
 
@@ -854,7 +856,7 @@
   els.addForm.addEventListener('submit', ev => {
     ev.preventDefault();
     const text = els.addText.value;
-    if (!text.trim()) { els.addText.focus(); toast('Collez au moins une ligne de journal.'); return; }
+    if (!text.trim()) { els.addText.focus(); toast('Paste at least one log line.'); return; }
     els.addDialog.close();
     ingest([{ name: els.addName.value.trim() || `source ${state.sources.length + 1}`, text, tz: els.addTz.value }]);
   });
@@ -879,10 +881,10 @@
     const text = ev.clipboardData && ev.clipboardData.getData('text');
     if (!text || !text.trim()) return;
     ev.preventDefault();
-    ingest([{ name: `collé ${++pasteN}`, text }]);
+    ingest([{ name: `pasted ${++pasteN}`, text }]);
   });
 
-  /* ---------- Barre d'outils ---------- */
+  /* ---------- Toolbar ---------- */
 
   let searchTimer;
   els.search.addEventListener('input', () => {
@@ -942,11 +944,11 @@
       const r = rows[i];
       if (r.k === 'e' && r.e.level === 'error') { select(r.e); scrollToRow(i, r.e); return; }
     }
-    toast(dir > 0 ? 'Plus d\'erreur plus bas.' : 'Plus d\'erreur plus haut.');
+    toast(dir > 0 ? 'No more errors below.' : 'No more errors above.');
   }
   els.btnNextErr.addEventListener('click', () => nextError(1));
 
-  /* ---------- Liste : défilement, clics, clavier ---------- */
+  /* ---------- List: scrolling, clicks, keyboard ---------- */
 
   let rowsQueued = false;
   els.viewport.addEventListener('scroll', () => {
@@ -1019,24 +1021,24 @@
       let ok = false;
       try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
       ta.remove();
-      toast(ok ? done : 'La copie a été refusée par le navigateur.');
+      toast(ok ? done : 'The browser refused the copy.');
     };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast(done), fallback);
     else fallback();
   }
 
   els.btnCopy.addEventListener('click', () => {
-    if (!state.filtered.length) { toast('Rien à copier : la vue est vide.'); return; }
-    copyText(viewText(), `${nf(state.filtered.length)} entrées copiées, horodatage et source en tête de ligne.`);
+    if (!state.filtered.length) { toast('Nothing to copy: the view is empty.'); return; }
+    copyText(viewText(), `${nf(state.filtered.length)} entr${state.filtered.length === 1 ? 'y' : 'ies'} copied, with timestamp and source at the start of each line.`);
   });
 
   if (inIframe) els.btnDownload.hidden = true;
   els.btnDownload.addEventListener('click', () => {
-    if (!state.filtered.length) { toast('Rien à télécharger : la vue est vide.'); return; }
+    if (!state.filtered.length) { toast('Nothing to download: the view is empty.'); return; }
     const url = URL.createObjectURL(new Blob([viewText()], { type: 'text/plain' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'tresse-fusion.log';
+    a.download = 'tresse-merged.log';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1051,7 +1053,7 @@
     toastTimer = setTimeout(() => { els.toast.hidden = true; }, 3800);
   }
 
-  /* ---------- Exemple ---------- */
+  /* ---------- Sample ---------- */
 
   function loadDemo() {
     for (const o of window.TresseDemo.build()) addSource(Object.assign({ demo: true }, o));
@@ -1071,7 +1073,7 @@
     selectToken(e.ids.find(t => t.startsWith('ord_')));
   });
 
-  /* ---------- Démarrage ---------- */
+  /* ---------- Startup ---------- */
 
   function drawLogo() {
     const paths = [0, 1, 2].map(k => {

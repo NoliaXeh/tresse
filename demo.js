@@ -1,7 +1,7 @@
-/* Tresse — jeu d'exemple : un incident de paiement réparti sur quatre services.
-   Entre 12:02:04 et 12:03:12 UTC, un export comptable verrouille la table orders :
-   des paiements sont encaissés sans que la commande passe à « payée ».
-   L'horloge du worker retarde de 1,8 s. */
+/* Tresse — sample data: a payment incident spread across four services.
+   Between 12:02:04 and 12:03:12 UTC, an accounting export locks the orders table:
+   payments are captured without the order being marked “paid”.
+   The worker's clock is 1.8 s behind. */
 (function (root) {
   'use strict';
 
@@ -130,11 +130,11 @@
 
     push('pg', base + 31004, `${pgts(base + 31004)} [412] LOG:  checkpoint starting: time`);
     push('pg', base + 57918, `${pgts(base + 57918)} [412] LOG:  checkpoint complete: wrote 1843 buffers (11.2%); 0 WAL file(s) added, 0 removed, 1 recycled; write=26.790 s, sync=0.041 s, total=26.914 s`);
-    push('pg', L0 - 14, `${pgts(L0 - 14)} [51200] app=export-compta LOG:  statement: BEGIN`);
-    push('pg', L0, `${pgts(L0)} [51200] app=export-compta LOG:  statement: LOCK TABLE orders IN ACCESS EXCLUSIVE MODE`);
-    push('pg', L0 + 3, `${pgts(L0 + 3)} [51200] app=export-compta LOG:  statement: COPY (SELECT * FROM orders WHERE created_at >= '2026-09-01') TO STDOUT WITH CSV HEADER`);
-    push('pg', L1 - 2, `${pgts(L1 - 2)} [51200] app=export-compta LOG:  duration: 68017.412 ms  statement: COPY (SELECT * FROM orders WHERE created_at >= '2026-09-01') TO STDOUT WITH CSV HEADER`);
-    push('pg', L1, `${pgts(L1)} [51200] app=export-compta LOG:  statement: COMMIT`);
+    push('pg', L0 - 14, `${pgts(L0 - 14)} [51200] app=accounting-export LOG:  statement: BEGIN`);
+    push('pg', L0, `${pgts(L0)} [51200] app=accounting-export LOG:  statement: LOCK TABLE orders IN ACCESS EXCLUSIVE MODE`);
+    push('pg', L0 + 3, `${pgts(L0 + 3)} [51200] app=accounting-export LOG:  statement: COPY (SELECT * FROM orders WHERE created_at >= '2026-09-01') TO STDOUT WITH CSV HEADER`);
+    push('pg', L1 - 2, `${pgts(L1 - 2)} [51200] app=accounting-export LOG:  duration: 68017.412 ms  statement: COPY (SELECT * FROM orders WHERE created_at >= '2026-09-01') TO STDOUT WITH CSV HEADER`);
+    push('pg', L1, `${pgts(L1)} [51200] app=accounting-export LOG:  statement: COMMIT`);
     push('pg', base + 281440, `${pgts(base + 281440)} [51388] LOG:  automatic vacuum of table "shop.public.cart_items": index scans: 1, pages: 0 removed, 212 remain`);
 
     const text = k => out[k].sort((a, b) => a[0] - b[0]).map(x => x[1]).join('\n') + '\n';
