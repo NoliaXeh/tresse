@@ -55,8 +55,42 @@
     <div id="work" class="work">
       <div class="toolbar">
         <div class="search">
-          <input id="search" type="search" placeholder="Search, or /regular expression/" aria-label="Search the logs" autocomplete="off" spellcheck="false">
-          <span id="search-err" class="search-err" hidden>Invalid expression</span>
+          <div class="q-row">
+            <div class="q-box">
+              <div id="search-hl" class="q-hl" aria-hidden="true"></div>
+              <input id="search" type="text" placeholder="Search or query: level:>=warn source:api &quot;lock timeout&quot;" aria-label="Search or query the logs"
+                role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off" spellcheck="false">
+            </div>
+            <button id="btn-qhelp" class="q-help-btn" type="button" aria-expanded="false" aria-controls="qhelp" title="Query syntax (?)">?</button>
+          </div>
+          <p id="search-msg" class="search-msg" role="status" hidden></p>
+          <ul id="suggest" class="suggest" role="listbox" aria-label="Suggestions" hidden></ul>
+          <div id="qhelp" class="qhelp" role="dialog" aria-label="Query syntax" hidden>
+            <table>
+              <tr><td><code>lock timeout</code></td><td>Both words, anywhere in the entry (case-insensitive)</td></tr>
+              <tr><td><code>"lock timeout"</code></td><td>Exact phrase</td></tr>
+              <tr><td><code>/timeout|refused/i</code></td><td>Regular expression (<code>i</code>: ignore case)</td></tr>
+              <tr><td><code>a OR b</code> <code>-a</code> <code>NOT (a b)</code></td><td>Either, exclude, group. Terms are combined with AND; OR binds tighter</td></tr>
+              <tr><td><code>source:api,worker</code></td><td>Source name; <code>,</code> means “or”</td></tr>
+              <tr><td><code>level:>=warn</code></td><td>Level: error, warn, info, debug, other</td></tr>
+              <tr><td><code>status:>=500</code></td><td>Any field found in the logs: <code>key=value</code> pairs, JSON keys, HTTP status, method, path… Compare with <code>&gt; &gt;= &lt; &lt;=</code></td></tr>
+              <tr><td><code>amount:2000..5000</code></td><td>Range, both ends included</td></tr>
+              <tr><td><code>order:ord_482*</code></td><td>Wildcard</td></tr>
+              <tr><td><code>msg:charge</code> <code>id:ord_48210</code></td><td>Text only, identifier</td></tr>
+              <tr><td><code>has:stack</code> <code>has:thread</code> <code>has:charge_id</code></td><td>Entries with a stack trace, a shared identifier, a field</td></tr>
+              <tr><td><code>time:12:02..12:03</code> <code>after:12:02:04</code> <code>before:2026-09-28T12:03</code></td><td>Time of day or date, in the displayed time zone</td></tr>
+              <tr><td><code>t0:-1s..2s</code> <code>t0:5s</code></td><td>Relative to T0; <code>t0:5s</code> means within 5 s of it</td></tr>
+            </table>
+            <p class="qhelp-h">Try</p>
+            <div class="qhelp-ex">
+              <button type="button" data-q="level:>=warn -source:postgres">level:>=warn -source:postgres</button>
+              <button type="button" data-q="status:>=500 OR has:stack">status:>=500 OR has:stack</button>
+              <button type="button" data-q="rt:>1 method:POST">rt:>1 method:POST</button>
+              <button type="button" data-q="app:accounting-export">app:accounting-export</button>
+              <button type="button" data-q="source:worker depth:>=5">source:worker depth:>=5</button>
+            </div>
+            <p class="qhelp-foot"><kbd>Tab</kbd> or <kbd>↓</kbd> for suggestions, <kbd>Enter</kbd> to apply. In a line's details, <b>+</b> and <b>−</b> add a field to the query.</p>
+          </div>
         </div>
         <div id="levels" class="levels" role="group" aria-label="Levels"></div>
         <div class="tools">
@@ -139,6 +173,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 
 <script src="parser.js"></script>
+<script src="query.js"></script>
 <script src="demo.js"></script>
 <script src="app.js"></script>
 </body>

@@ -3,6 +3,7 @@
   'use strict';
 
   const P = window.TresseParser;
+  const Q = window.TresseQuery;
   const RH = 22;
   const LANE = 10;
   const COLORS = ['#4C7EF3', '#E8773A', '#1FAE7E', '#B05BD6', '#D9A21B', '#1BA5BF', '#D9467A', '#7FA32E'];
@@ -34,7 +35,7 @@
   };
 
   const els = {};
-  ['search', 'search-err', 'levels', 'gap', 'display-tz', 'fold', 'btn-next-err', 'braid', 'btn-unzoom', 'summary',
+  ['search', 'search-hl', 'search-msg', 'suggest', 'btn-qhelp', 'qhelp', 'levels', 'gap', 'display-tz', 'fold', 'btn-next-err', 'braid', 'btn-unzoom', 'summary',
     'viewport', 'spacer', 'rows', 'source-list', 'src-count', 'thread-list', 'thread-filter', 'threads-count', 'journey',
     'detail', 'tab-threads', 'tab-detail', 'panel-threads', 'panel-detail', 'empty', 'work', 'format-list', 'banner',
     'add-dialog', 'add-form', 'add-name', 'add-text', 'add-tz', 'add-files', 'add-cancel', 'file-input', 'drop', 'toast',
@@ -44,7 +45,7 @@
   const state = {
     sources: [], merged: [], filtered: [], rows: [], rowT: new Float64Array(0), rowOf: new Map(),
     tokens: new Map(), shared: [], sharedSet: new Set(),
-    q: '', qre: null, levels: new Set(LEVELS.map(l => l[0])),
+    query: '', qc: null, levels: new Set(LEVELS.map(l => l[0])),
     range: null, token: null, threadOnly: false,
     selected: null, anchor: null, flash: null,
     displayTz: store.get('displayTz', 'local'), gap: store.get('gap', 5000), fold: false,
@@ -169,17 +170,10 @@
 
   /* ---------- Filters and rows ---------- */
 
-  function matchText(e) {
-    if (state.qre) {
-      if (state.qre.test(e.line)) return true;
-      return !!e.cont && e.cont.some(l => state.qre.test(l));
-    }
-    if (e.lc === undefined) e.lc = (e.cont ? e.line + '\n' + e.cont.join('\n') : e.line).toLowerCase();
-    return e.lc.includes(state.q);
-  }
-
   function applyFilters() {
-    const { levels, range, q } = state;
+    compileQuery();
+    const { levels, range } = state;
+    const test = state.qc && state.qc.test;
     const only = state.threadOnly && state.token ? new Set(state.tokens.get(state.token).entries) : null;
     const allLv = levels.size === LEVELS.length;
     const out = [];
@@ -187,7 +181,7 @@
       if (!allLv && !levels.has(e.level)) continue;
       if (range && (e.te < range[0] || e.te > range[1])) continue;
       if (only && !only.has(e)) continue;
-      if (q && !matchText(e)) continue;
+      if (test && !test(e)) continue;
       out.push(e);
     }
     state.filtered = out;
@@ -239,18 +233,23 @@
         k = text.indexOf(tok, k + tok.length);
       }
     }
-    if (state.q) {
-      if (state.qre) {
-        const re = new RegExp(state.qre.source, state.qre.flags.replace('g', '') + 'g');
-        let m, n = 0;
+    const hl = state.qc && state.qc.hl;
+    if (hl) {
+      let n = 0;
+      for (const re of hl.res) {
+        re.lastIndex = 0;
+        let m;
         while ((m = re.exec(text)) && n++ < 30) {
           if (!m[0].length) { re.lastIndex++; continue; }
           R.push([m.index, m.index + m[0].length, 'hl']);
         }
-      } else {
+      }
+      if (hl.subs.length) {
         const lc = text.toLowerCase();
-        let k = lc.indexOf(state.q), n = 0;
-        while (k !== -1 && n++ < 30) { R.push([k, k + state.q.length, 'hl']); k = lc.indexOf(state.q, k + state.q.length); }
+        for (const q of hl.subs) {
+          let k = lc.indexOf(q);
+          while (k !== -1 && n++ < 60) { R.push([k, k + q.length, 'hl']); k = lc.indexOf(q, k + q.length); }
+        }
       }
     }
     if (!R.length) return esc(text);
@@ -328,7 +327,7 @@
     let i = state.rowOf.get(e);
     if (i == null) {
       // The entry is hidden by a filter: clear the filters that exclude it.
-      state.q = ''; state.qre = null; els.search.value = ''; els.search.classList.remove('bad'); els.searchErr.hidden = true;
+      state.query = ''; els.search.value = ''; paintQuery();
       state.levels = new Set(LEVELS.map(l => l[0]));
       if (state.range && (e.te < state.range[0] || e.te > state.range[1])) state.range = null;
       if (state.threadOnly && !(state.token && e.ids.includes(state.token))) state.threadOnly = false;
@@ -668,6 +667,16 @@
     const s = e.src;
     const text = e.cont ? e.line + '\n' + e.cont.join('\n') : e.line;
     const ids = e.ids.map(t => `<button type="button" data-tok="${esc(t)}" class="${state.sharedSet.has(t) ? 'shared' : ''}" title="${state.sharedSet.has(t) ? 'Present in several sources' : 'Present in a single source'}">${esc(t)}</button>`).join('');
+    const builtin = new Set(Q.builtins.map(b => b[0]));
+    const frow = (k, v) => {
+      const term = `${k}:${Q.quote(v)}`;
+      const shown = v.length > 90 ? v.slice(0, 90) + '…' : v;
+      return `<tr><th>${esc(k)}</th><td title="${esc(v)}">${esc(shown)}</td><td class="f-act">`
+        + `<button type="button" data-q="${esc(term)}" title="Only entries with ${esc(term)}" aria-label="Filter on ${esc(term)}">+</button>`
+        + `<button type="button" data-q="-${esc(term)}" title="Exclude entries with ${esc(term)}" aria-label="Exclude ${esc(term)}">−</button></td></tr>`;
+    };
+    const fields = [frow('source', s.name), frow('level', e.level)]
+      .concat([...Q.fields(e)].filter(([k]) => !builtin.has(k)).slice(0, 40).map(([k, vs]) => frow(k, vs[0])));
     const a = state.anchor;
     let dl = `<dt>Time</dt><dd>${fullStamp(e.te)}</dd>`;
     if (s.offset) dl += `<dt>Source clock</dt><dd>${clock(e.t)} (offset ${s.offset > 0 ? '+' : '−'}${nf(Math.abs(s.offset))} ms)</dd>`;
@@ -681,6 +690,7 @@
       <dl>${dl}</dl>
       <pre class="d-text">${esc(text)}</pre>
       ${ids ? `<div><p class="muted small">Detected identifiers</p><div class="d-ids">${ids}</div></div>` : ''}
+      <div><p class="muted small">Fields: <b>+</b> filters the log on a value, <b>−</b> excludes it</p><table class="d-fields">${fields.join('')}</table></div>
       <div class="d-actions">${actions}</div>
       ${a && a !== e && a.src !== e.src ? `<p class="d-note">T0 is a line from ${esc(a.src.name)}. If these two lines describe the same moment, “Align” corrects the clock drift between the two sources.</p>` : ''}
       ${!a ? '<p class="d-note">Tip: set T0 on a line, then pick the line from another source that matches the same moment to align their clocks.</p>' : ''}
@@ -688,6 +698,8 @@
   }
 
   els.detail.addEventListener('click', ev => {
+    const qb = ev.target.closest('button[data-q]');
+    if (qb) { addTerm(qb.dataset.q); return; }
     const tb = ev.target.closest('button[data-tok]');
     if (tb) { selectToken(tb.dataset.tok); return; }
     const b = ev.target.closest('button[data-act]');
@@ -708,6 +720,7 @@
 
   function setAnchor(e) {
     state.anchor = e;
+    if (/\bt0:/i.test(state.query)) { applyFilters(); return; }
     renderSummary(); renderRows(); renderDetail(); drawBraid();
   }
 
@@ -886,23 +899,265 @@
 
   /* ---------- Toolbar ---------- */
 
+  /* ---------- Query ---------- */
+
+  let stats = null, statsFor = null, known = new Map();
+  function fieldStats() {
+    if (statsFor !== state.merged) { stats = Q.fieldStats(state.merged); statsFor = state.merged; known = new Map(); }
+    return stats;
+  }
+  function hasField(k) {
+    if (fieldStats().has(k)) return true;
+    if (!known.has(k)) known.set(k, state.merged.some(e => Q.fields(e).has(k)));
+    return known.get(k);
+  }
+
+  function compileQuery() {
+    state.qc = state.query
+      ? Q.compile(state.query, { utc: state.displayTz === 'utc', anchor: state.anchor, sources: state.sources, shared: state.sharedSet, hasField })
+      : null;
+    paintQuery();
+  }
+
+  // Colors the query in place: an overlay behind the input's transparent text.
+  function paintQuery() {
+    const v = els.search.value;
+    const cls = new Array(v.length).fill('');
+    for (const [a, b, c] of Q.parse(v).spans) for (let i = a; i < b; i++) cls[i] = c;
+    const qc = state.qc && state.query === v.trim() ? state.qc : null;
+    if (qc) for (const [a, b] of qc.bad) for (let i = a; i < b; i++) cls[i] += ' q-bad';
+    let h = '';
+    for (let i = 0; i < v.length;) {
+      let j = i + 1;
+      while (j < v.length && cls[j] === cls[i]) j++;
+      h += cls[i] ? `<span class="${cls[i]}">${esc(v.slice(i, j))}</span>` : esc(v.slice(i, j));
+      i = j;
+    }
+    els.searchHl.innerHTML = h + ' ';
+    els.searchHl.scrollLeft = els.search.scrollLeft;
+    const msgs = qc ? qc.errors.concat(qc.notes) : [];
+    els.searchMsg.hidden = !msgs.length;
+    els.searchMsg.textContent = msgs.join(' · ');
+    els.searchMsg.classList.toggle('err', !!(qc && qc.errors.length));
+    els.search.classList.toggle('bad', !!(qc && qc.errors.length));
+  }
+
   let searchTimer;
-  els.search.addEventListener('input', () => {
+  function setQuery(v, now) {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      const v = els.search.value;
-      const m = /^\/(.+)\/([imsu]*)$/.exec(v.trim());
-      let bad = false;
-      if (m) {
-        try { state.qre = new RegExp(m[1], m[2]); state.q = v; } catch (e) { bad = true; }
-      } else { state.qre = null; state.q = v.toLowerCase(); }
-      if (bad) { state.qre = null; state.q = ''; }
-      els.search.classList.toggle('bad', bad);
-      els.searchErr.hidden = !bad;
+    const run = () => {
+      state.query = v.trim();
       applyFilters();
       els.viewport.scrollTop = 0;
       renderRows(); drawBraid();
-    }, 120);
+    };
+    if (now) run(); else searchTimer = setTimeout(run, 150);
+  }
+
+  function remember(q) {
+    q = q.trim();
+    if (!q || (state.qc && state.query === q && state.qc.errors.length)) return;
+    store.set('queries', [q].concat(store.get('queries', []).filter(x => x !== q)).slice(0, 8));
+  }
+
+  function applyText(v) {
+    els.search.value = v;
+    els.search.setSelectionRange(v.length, v.length);
+    setQuery(v, true);
+    remember(v);
+  }
+
+  // Adds `term` to the query (from the detail panel), replacing its opposite if present.
+  function addTerm(term) {
+    const cur = ` ${els.search.value.trim()} `;
+    if (cur.includes(` ${term} `)) { toast('Already in the query.'); return; }
+    const opposite = term[0] === '-' ? term.slice(1) : '-' + term;
+    const v = (cur.split(` ${opposite} `).join(' ').trim() + ' ' + term).trim();
+    applyText(v);
+  }
+
+  /* ---------- Suggestions ---------- */
+
+  const EXAMPLES = [
+    ['level:>=warn', 'warnings and errors'],
+    ['has:stack', 'entries with a stack trace'],
+    ['status:>=500', 'HTTP server errors'],
+    ['"lock timeout" OR /still waiting/', 'a phrase or a regular expression'],
+    ['source:api -level:debug', 'one source, without debug lines'],
+  ];
+  const sug = { items: [], active: -1, a: 0, b: 0 };
+  const nEntries = n => `${nf(n)} entr${n === 1 ? 'y' : 'ies'}`;
+
+  function tokenAtCaret() {
+    const v = els.search.value, c = els.search.selectionStart == null ? v.length : els.search.selectionStart;
+    let quotes = 0;
+    for (let i = 0; i < c; i++) if (v[i] === '"') quotes++;
+    let a = quotes % 2 ? v.lastIndexOf('"', c - 1) : c;
+    while (a > 0 && !/[\s(]/.test(v[a - 1])) a--;
+    let b = c;
+    if (!(quotes % 2)) while (b < v.length && !/[\s)]/.test(v[b])) b++;
+    return { a, b, text: v.slice(a, c) };
+  }
+
+  function fieldNames() {
+    const out = Q.builtins.map(([k, d]) => [k, d]);
+    const st = [...fieldStats()].filter(([k]) => !Q.builtins.some(b => b[0] === k)).sort((x, y) => y[1].n - x[1].n);
+    for (const [k, s] of st) out.push([k, `field · ${nEntries(s.n)}`]);
+    return out;
+  }
+
+  function valuesFor(f, op) {
+    const cnt = {};
+    switch (f) {
+      case 'source':
+        return state.sources.map(s => [s.name, nEntries(s.entries.length)]);
+      case 'level':
+        for (const e of state.merged) cnt[e.level] = (cnt[e.level] || 0) + 1;
+        return Q.levels.filter(l => op ? l !== 'other' : cnt[l]).map(l => [l, op ? '' : nf(cnt[l])]);
+      case 'has':
+        return [['stack', 'a stack trace or continuation lines'], ['thread', 'an identifier shared with another source'], ['id', 'any identifier']]
+          .concat(fieldNames().slice(Q.builtins.length).map(([k, d]) => [k, d]));
+      case 'id':
+        return state.shared.slice(0, 300).map(r => [r.tok, `${r.srcs.size} sources${r.err ? ' · error' : ''}`]);
+      case 'time': case 'after': case 'before': {
+        const out = [], f0 = state.filtered;
+        if (state.selected) out.push([clock(state.selected.te), 'selected line']);
+        if (state.anchor) out.push([clock(state.anchor.te), 'T0']);
+        if (f0.length) out.push([clock(f0[0].te, false), 'first entry in view'], [clock(f0[f0.length - 1].te, false), 'last entry in view']);
+        if (f === 'time' && f0.length) out.push([`${clock(f0[0].te, false)}..${clock(f0[f0.length - 1].te, false)}`, 'range of the view']);
+        return out;
+      }
+      case 't0':
+        return state.anchor ? [['1s', 'within a second of T0'], ['0..5s', 'the 5 seconds after T0'], ['-5s..0', 'the 5 seconds before T0'], ['0', 'after T0 (with >)']] : [];
+      case 'msg':
+        return [];
+      default: {
+        const s = fieldStats().get(f);
+        return s ? [...s.vals].sort((x, y) => y[1] - x[1]).slice(0, 200).map(([v, n]) => [v, `${nf(n)}×`]) : [];
+      }
+    }
+  }
+
+  function suggestions(force) {
+    const v = els.search.value;
+    if (!v.trim()) {
+      const out = store.get('queries', []).map(q => ({ label: q, hint: 'recent', insert: q, whole: true }));
+      for (const [q, hint] of EXAMPLES) if (!out.some(o => o.insert === q)) out.push({ label: q, hint, insert: q, whole: true });
+      return { a: 0, b: v.length, items: out.slice(0, 10) };
+    }
+    const { a, b, text } = tokenAtCaret();
+    const neg = text[0] === '-' ? '-' : '';
+    const t = text.slice(neg.length);
+    const items = [];
+    const m = /^([A-Za-z_@][\w.@-]*):(>=|<=|>|<|=)?"?(.*)$/.exec(t);
+    if (m) {
+      const f = Q.resolveField(m[1]), op = m[2] || '', pre = m[3].toLowerCase();
+      const vals = valuesFor(f, op);
+      const starts = vals.filter(([x]) => x.toLowerCase().startsWith(pre));
+      const inside = pre ? vals.filter(([x]) => !x.toLowerCase().startsWith(pre) && x.toLowerCase().includes(pre)) : [];
+      for (const [x, hint] of starts.concat(inside)) {
+        if (x.toLowerCase() === pre) continue;
+        items.push({ label: `${m[1]}:${op}${x}`, hint, insert: `${neg}${m[1]}:${op}${f === 'time' || f === 't0' ? x : Q.quote(x)} ` });
+      }
+    } else if ((t && !/^["/(]/.test(t)) || force) {
+      const lc = t.toLowerCase();
+      for (const [k, hint] of fieldNames()) {
+        if (k.startsWith(lc) && k !== lc) items.push({ label: k + ':', hint, insert: neg + k + ':', more: true });
+      }
+    }
+    return { a, b, items: items.slice(0, 12) };
+  }
+
+  function openSuggest(force) {
+    if (document.activeElement !== els.search) { closeSuggest(); return; }
+    const r = suggestions(force);
+    sug.items = r.items; sug.a = r.a; sug.b = r.b;
+    sug.active = force && r.items.length ? 0 : -1;
+    if (!r.items.length) { closeSuggest(); return; }
+    renderSuggest();
+  }
+
+  function renderSuggest() {
+    els.suggest.innerHTML = sug.items.map((s, i) =>
+      `<li role="option" id="sg-${i}" data-i="${i}" aria-selected="${i === sug.active}"><code>${esc(s.label)}</code><span>${esc(s.hint || '')}</span></li>`).join('');
+    els.suggest.hidden = false;
+    els.qhelp.hidden = true;
+    els.btnQhelp.setAttribute('aria-expanded', 'false');
+    els.search.setAttribute('aria-expanded', 'true');
+    if (sug.active >= 0) {
+      els.search.setAttribute('aria-activedescendant', 'sg-' + sug.active);
+      els.suggest.children[sug.active].scrollIntoView({ block: 'nearest' });
+    } else els.search.removeAttribute('aria-activedescendant');
+  }
+
+  function closeSuggest() {
+    sug.items = [];
+    els.suggest.hidden = true;
+    els.search.setAttribute('aria-expanded', 'false');
+    els.search.removeAttribute('aria-activedescendant');
+  }
+
+  function acceptSuggest(i) {
+    const s = sug.items[i];
+    if (!s) return;
+    if (s.whole) { closeSuggest(); applyText(s.insert); paintQuery(); return; }
+    const v = els.search.value;
+    let rest = v.slice(sug.b);
+    if (s.insert.endsWith(' ') && rest[0] === ' ') rest = rest.slice(1);
+    const nv = v.slice(0, sug.a) + s.insert + rest;
+    const caret = sug.a + s.insert.length;
+    els.search.value = nv;
+    els.search.setSelectionRange(caret, caret);
+    paintQuery();
+    if (s.more) { openSuggest(true); setQuery(nv); } else { closeSuggest(); setQuery(nv, true); }
+  }
+
+  els.search.addEventListener('input', () => { paintQuery(); setQuery(els.search.value); openSuggest(false); });
+  els.search.addEventListener('focus', () => { if (!els.search.value.trim()) openSuggest(false); });
+  els.search.addEventListener('blur', () => { closeSuggest(); if (state.query === els.search.value.trim()) remember(state.query); });
+  ['scroll', 'keyup', 'click', 'select'].forEach(t => els.search.addEventListener(t, () => { els.searchHl.scrollLeft = els.search.scrollLeft; }));
+  els.search.addEventListener('keydown', ev => {
+    const open = !els.suggest.hidden && sug.items.length;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (!open) { openSuggest(true); return; }
+      const n = sug.items.length;
+      sug.active = ev.key === 'ArrowDown' ? (sug.active + 1) % n : (sug.active <= 0 ? n - 1 : sug.active - 1);
+      renderSuggest();
+    } else if (ev.key === 'Tab' && !ev.shiftKey && open) {
+      ev.preventDefault();
+      acceptSuggest(Math.max(0, sug.active));
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (open && sug.active >= 0) acceptSuggest(sug.active);
+      else { closeSuggest(); setQuery(els.search.value, true); remember(els.search.value); }
+    } else if (ev.key === 'Escape' && (open || !els.qhelp.hidden)) {
+      ev.stopPropagation();
+      closeSuggest();
+      showHelp(false);
+    }
+  });
+  els.suggest.addEventListener('mousedown', ev => {
+    ev.preventDefault();
+    const li = ev.target.closest('li[data-i]');
+    if (li) acceptSuggest(+li.dataset.i);
+  });
+
+  function showHelp(on) {
+    els.qhelp.hidden = !on;
+    els.btnQhelp.setAttribute('aria-expanded', String(on));
+    if (on) closeSuggest();
+  }
+  els.btnQhelp.addEventListener('click', () => showHelp(els.qhelp.hidden));
+  els.qhelp.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-q]');
+    if (!b) return;
+    showHelp(false);
+    applyText(b.dataset.q);
+    els.search.focus();
+  });
+  document.addEventListener('mousedown', ev => {
+    if (!els.qhelp.hidden && !ev.target.closest('.search')) showHelp(false);
   });
 
   els.levels.addEventListener('click', ev => {
@@ -985,18 +1240,20 @@
     const t = ev.target;
     if (els.addDialog.open) return;
     if (t.closest && t.closest('input, textarea, select')) {
-      if (ev.key === 'Escape' && t === els.search && els.search.value) { els.search.value = ''; els.search.dispatchEvent(new Event('input')); }
+      if (ev.key === 'Escape' && t === els.search && els.search.value) { els.search.value = ''; paintQuery(); setQuery('', true); }
       return;
     }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (ev.key === '/') { ev.preventDefault(); els.search.focus(); }
+    else if (ev.key === '?') showHelp(els.qhelp.hidden);
     else if (ev.key === 'n') nextError(1);
     else if (ev.key === 'N') nextError(-1);
     else if (ev.key === 'ArrowDown' || ev.key === 'j') { ev.preventDefault(); moveSel(1); }
     else if (ev.key === 'ArrowUp' || ev.key === 'k') { ev.preventDefault(); moveSel(-1); }
     else if (ev.key === 't' && state.selected) setAnchor(state.anchor === state.selected ? null : state.selected);
     else if (ev.key === 'Escape') {
-      if (state.token) clearToken();
+      if (!els.qhelp.hidden) showHelp(false);
+      else if (state.token) clearToken();
       else if (state.range) { state.range = null; applyFilters(); }
       else if (state.selected) { state.selected = null; renderRows(); renderDetail(); }
     }
