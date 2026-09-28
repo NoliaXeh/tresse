@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tresse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg id="logo" class="logo" viewBox="0 0 36 24" aria-hidden="true"></svg>
+    <div>
+      <h1>Tresse</h1>
+      <p class="tagline">Les journaux de tous vos services, sur une seule ligne de temps.</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="btn-add" class="btn primary" type="button">Ajouter des journaux</button>
+    <label class="btn" for="file-input">Ouvrir des fichiers</label>
+    <input type="file" id="file-input" multiple hidden>
+    <button id="btn-copy" class="btn" type="button">Copier la vue</button>
+    <button id="btn-download" class="btn" type="button">Télécharger</button>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden>
+  <p><b>Exemple chargé :</b> un incident de paiement du 28 septembre 2026 réparti sur quatre services.
+    Ouvrez un fil en erreur à droite pour suivre une commande d'un service à l'autre. Les lignes du worker
+    apparaissent avant la requête qui les déclenche : son horloge retarde de 1,8 s. Corrigez-la avec le décalage de la source.</p>
+  <div class="banner-actions">
+    <button id="btn-demo-fail" class="btn small" type="button">Voir un paiement échoué</button>
+    <button id="btn-demo-clear" class="btn small ghost" type="button">Retirer l'exemple</button>
+  </div>
+</div>
+
+<main class="layout">
+  <aside class="sources" aria-label="Sources">
+    <div class="panel-head"><h2>Sources</h2><span id="src-count" class="count"></span></div>
+    <div id="source-list" class="source-list"></div>
+    <p class="privacy">Tout est traité dans votre navigateur. Aucune ligne n'est envoyée ailleurs.</p>
+  </aside>
+
+  <section class="center" aria-label="Journal fusionné">
+    <div id="empty" class="empty" hidden>
+      <h2>Déposez vos journaux ici</h2>
+      <p>Glissez un ou plusieurs fichiers, collez du texte avec <kbd>Ctrl</kbd>+<kbd>V</kbd> ou utilisez « Ajouter des journaux ».
+        Chaque fichier devient une source ; Tresse reconnaît l'horodatage et entrelace les lignes.</p>
+      <ul id="format-list" class="format-list"></ul>
+    </div>
+
+    <div id="work" class="work">
+      <div class="toolbar">
+        <div class="search">
+          <input id="search" type="search" placeholder="Rechercher, ou /expression régulière/" aria-label="Rechercher dans les journaux" autocomplete="off" spellcheck="false">
+          <span id="search-err" class="search-err" hidden>Expression invalide</span>
+        </div>
+        <div id="levels" class="levels" role="group" aria-label="Niveaux"></div>
+        <div class="tools">
+          <label class="mini">Trous
+            <select id="gap">
+              <option value="1000">≥ 1 s</option>
+              <option value="5000">≥ 5 s</option>
+              <option value="30000">≥ 30 s</option>
+              <option value="300000">≥ 5 min</option>
+              <option value="0">jamais</option>
+            </select>
+          </label>
+          <label class="mini">Heure
+            <select id="display-tz">
+              <option value="local">locale</option>
+              <option value="utc">UTC</option>
+            </select>
+          </label>
+          <label class="mini check"><input type="checkbox" id="fold"> Replier les suites</label>
+          <button id="btn-next-err" class="btn small" type="button" title="Raccourci : n (Maj+n pour la précédente)">Erreur suivante</button>
+        </div>
+      </div>
+
+      <div class="braid-wrap">
+        <canvas id="braid" aria-label="Densité des évènements par source dans le temps"></canvas>
+        <div class="braid-foot">
+          <span class="hint">Glissez sur la tresse pour isoler une plage, cliquez pour y aller.</span>
+          <button id="btn-unzoom" class="btn small ghost" type="button" hidden>Toute la durée</button>
+        </div>
+      </div>
+
+      <div id="summary" class="summary"></div>
+
+      <div id="viewport" class="viewport" tabindex="0" aria-label="Lignes fusionnées. Flèches pour parcourir.">
+        <div id="spacer" class="spacer"><div id="rows" class="rows"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side" aria-label="Fils et détail">
+    <div class="tabs" role="tablist">
+      <button id="tab-threads" role="tab" aria-selected="true" aria-controls="panel-threads" type="button">Fils communs <span id="threads-count" class="count"></span></button>
+      <button id="tab-detail" role="tab" aria-selected="false" aria-controls="panel-detail" type="button">Détail</button>
+    </div>
+    <div id="panel-threads" role="tabpanel" class="panel">
+      <div id="journey"></div>
+      <p class="muted small">Identifiants vus dans au moins deux sources : requêtes, commandes, paiements, traces. Les fils liés à une erreur sont en tête.</p>
+      <input id="thread-filter" type="search" class="thread-filter" placeholder="Filtrer les fils" aria-label="Filtrer les fils" autocomplete="off">
+      <ul id="thread-list" class="thread-list"></ul>
+    </div>
+    <div id="panel-detail" role="tabpanel" class="panel" hidden>
+      <div id="detail"><p class="muted">Cliquez sur une ligne pour voir son détail.</p></div>
+    </div>
+  </aside>
+</main>
+
+<dialog id="add-dialog" class="dialog">
+  <form id="add-form" method="dialog">
+    <h2>Ajouter une source</h2>
+    <label class="field">Nom
+      <input id="add-name" type="text" placeholder="api, nginx, worker…" autocomplete="off">
+    </label>
+    <label class="field">Lignes de journal
+      <textarea id="add-text" rows="12" spellcheck="false" placeholder="2026-09-28 12:02:11,482 INFO [checkout] req=7c1f3a9b2e4d5f60 start…"></textarea>
+    </label>
+    <label class="field">Fuseau des heures sans fuseau
+      <select id="add-tz"></select>
+    </label>
+    <div class="dialog-actions">
+      <label class="btn ghost" for="add-files">Choisir des fichiers…</label>
+      <input type="file" id="add-files" multiple hidden>
+      <span class="grow"></span>
+      <button id="add-cancel" class="btn" type="button">Annuler</button>
+      <button id="add-ok" class="btn primary" type="submit">Ajouter</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="drop" class="drop" hidden><div>Déposez vos fichiers : une source par fichier</div></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="parser.js"></script>
+<script src="demo.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
