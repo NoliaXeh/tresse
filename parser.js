@@ -61,6 +61,19 @@
       },
     },
     {
+      // Redis : « pid:rôle JJ Mon AAAA hh:mm:ss.mmm <niveau> message », niveau parmi . - * #
+      id: 'redis', label: 'Redis (JJ Mon AAAA hh:mm:ss)',
+      re: /(?<!\d)(\d{1,2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?!\d)(?: ([.*#-])(?= ))?/,
+      read(m, c) {
+        const mo = MON[m[2].toLowerCase()];
+        if (mo == null) return null;
+        return {
+          t: epoch(+m[3], mo, +m[1], +m[4], +m[5], +m[6], fracMs(m[7]), null, c.tz), zoned: false,
+          level: { '.': 'debug', '-': 'debug', '*': 'info', '#': 'warn' }[m[8]],
+        };
+      },
+    },
+    {
       id: 'klog', label: 'klog (Kubernetes, glog)', needs: 'year',
       re: /^([IWEF])(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{1,9})/,
       read(m, c) {

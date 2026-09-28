@@ -802,6 +802,19 @@ mark.hl { background: var(--hl); border-radius: 2px; }
       },
     },
     {
+      // Redis : « pid:rôle JJ Mon AAAA hh:mm:ss.mmm <niveau> message », niveau parmi . - * #
+      id: 'redis', label: 'Redis (JJ Mon AAAA hh:mm:ss)',
+      re: /(?<!\d)(\d{1,2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?!\d)(?: ([.*#-])(?= ))?/,
+      read(m, c) {
+        const mo = MON[m[2].toLowerCase()];
+        if (mo == null) return null;
+        return {
+          t: epoch(+m[3], mo, +m[1], +m[4], +m[5], +m[6], fracMs(m[7]), null, c.tz), zoned: false,
+          level: { '.': 'debug', '-': 'debug', '*': 'info', '#': 'warn' }[m[8]],
+        };
+      },
+    },
+    {
       id: 'klog', label: 'klog (Kubernetes, glog)', needs: 'year',
       re: /^([IWEF])(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{1,9})/,
       read(m, c) {
@@ -1189,6 +1202,7 @@ mark.hl { background: var(--hl); border-radius: 2px; }
     iso: '2026-09-28 12:02:11,482 INFO …',
     clf: '81.64.12.9 - - [28/Sep/2026:14:02:11 +0200] "GET /" 200',
     eu: '28/09/2026 12:02:11 WARN …',
+    redis: '1:M 28 Sep 2026 12:02:11.482 * Ready to accept connections',
     klog: 'I0928 12:02:11.482913 1 main.go:42] …',
     syslog: 'Sep 28 12:02:11 web-1 sshd[812]: …',
     epoch: '1790596931.482 INFO …',
