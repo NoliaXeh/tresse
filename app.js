@@ -14,6 +14,7 @@
     clf: '81.64.12.9 - - [28/Sep/2026:14:02:11 +0200] "GET /" 200',
     eu: '28/09/2026 12:02:11 WARN …',
     redis: '1:M 28 Sep 2026 12:02:11.482 * Ready to accept connections',
+    'redis-old': '1:M 28 Sep 12:02:11.482 # Server initialized',
     klog: 'I0928 12:02:11.482913 1 main.go:42] …',
     syslog: 'Sep 28 12:02:11 web-1 sshd[812]: …',
     epoch: '1790596931.482 INFO …',

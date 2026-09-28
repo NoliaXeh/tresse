@@ -10,8 +10,9 @@ ce que vous avez sous la main : des fichiers ou du texte copié depuis un termin
 ## Ce que fait l'outil
 
 - **Détection automatique du format** de chaque source : ISO 8601, Apache/Nginx, JSON par ligne
-  (pino, bunyan, logrus, zap…), syslog BSD, klog/glog (Kubernetes), Redis, JJ/MM/AAAA, timestamps Unix, heure seule
-  (avec gestion du passage à minuit).
+  (pino, bunyan, logrus, zap…), syslog BSD, klog/glog (Kubernetes), Redis (y compris < 5, sans année), JJ/MM/AAAA, timestamps Unix, heure seule
+  (avec gestion du passage à minuit). Un fichier aux formats mêlés est lu selon son format majoritaire ; une ligne
+  qui n'y correspond pas est essayée avec les autres formats si son horodatage est en tête de ligne.
 - **Fuseaux** : lus dans les lignes quand ils y sont, sinon réglables par source.
 - **Décalage d'horloge** par source, à la milliseconde, ou par calage : on choisit une ligne comme T0, puis la ligne
   d'une autre source qui correspond au même instant, et Tresse calcule le décalage.

@@ -74,6 +74,21 @@
       },
     },
     {
+      // Redis < 5 : pas d'année, « pid:rôle JJ Mon hh:mm:ss.mmm » (3.x, 4.x) ou « [pid] JJ Mon … » (2.x).
+      // Le préfixe est exigé pour ne pas confondre avec une date quelconque dans le texte.
+      id: 'redis-old', label: 'Redis < 5 (JJ Mon hh:mm:ss)', needs: 'year',
+      re: /(?:^|\s)(?:\[\d+\]|\d+:[XCSM]) (\d{1,2}) ([A-Za-z]{3}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?!\d)(?: ([.*#-])(?= ))?/,
+      read(m, c) {
+        const mo = MON[m[2].toLowerCase()];
+        if (mo == null) return null;
+        const [y] = refDate(c);
+        return {
+          t: epoch(y, mo, +m[1], +m[3], +m[4], +m[5], fracMs(m[6]), null, c.tz), zoned: false,
+          level: { '.': 'debug', '-': 'debug', '*': 'info', '#': 'warn' }[m[7]],
+        };
+      },
+    },
+    {
       id: 'klog', label: 'klog (Kubernetes, glog)', needs: 'year',
       re: /^([IWEF])(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{1,9})/,
       read(m, c) {
@@ -143,8 +158,21 @@
     if (!m) return null;
     const r = fmt.read(m, c);
     if (!r || !isFinite(r.t)) return null;
+    r.at = m.index;
     r.end = m.index + m[0].length;
     return r;
+  }
+
+  // Ligne que le format principal ne reconnaît pas (fichier aux formats mêlés) : on essaie les autres,
+  // à condition que l'horodatage soit en tête de ligne, pour ne pas découper une trace qui cite une date.
+  const FALLBACK_AT = 40;
+  function tryOthers(main, line, c) {
+    for (const f of ALL) {
+      if (f === main || f.id === 'time') continue;
+      const r = tryFormat(f, line, c);
+      if (r && !(r.at > FALLBACK_AT)) { r.fmt = f; return r; }
+    }
+    return null;
   }
 
   function timeValue(v, c) {
@@ -256,16 +284,17 @@
       const line = lines[i];
       if (!line.trim()) continue;
       nonEmpty++;
-      const r = fmt ? tryFormat(fmt, line, c) : null;
+      let r = fmt ? tryFormat(fmt, line, c) : null;
+      if (!r && fmt) r = tryOthers(fmt, line, c);
       if (r) {
         let t = r.t;
-        if (roll) {
+        if (roll && !r.fmt) {
           // Journaux sans date : un retour en arrière de plus de 12 h signale un passage à minuit.
           if (t + shift < prev - DAY / 2) shift += DAY;
           t += shift;
           prev = t;
         }
-        cur = { t, line, cont: null, level: r.level || findLevel(fmt, line, r.end) || 'other', n: i + 1 };
+        cur = { t, line, cont: null, level: r.level || findLevel(r.fmt || fmt, line, r.end) || 'other', n: i + 1 };
         if (r.zoned) zoned++;
         entries.push(cur);
       } else if (cur) {
