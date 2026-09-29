@@ -9,6 +9,9 @@
   const COLORS = ['#4C7EF3', '#E8773A', '#1FAE7E', '#B05BD6', '#D9A21B', '#1BA5BF', '#D9467A', '#7FA32E'];
   const LEVELS = [['error', 'Errors'], ['warn', 'Warn'], ['info', 'Info'], ['debug', 'Debug'], ['other', 'Other']];
   const LV_SHORT = { error: 'ERR', warn: 'WARN', info: 'INFO', debug: 'DBG', other: '·' };
+  const RULE_COLORS = [['#1FAE7E', 'Green'], ['#E5484D', 'Red'], ['#E8913A', 'Orange'], ['#4C7EF3', 'Blue'], ['#B05BD6', 'Purple'], ['#D9A21B', 'Yellow'], ['#1BA5BF', 'Cyan'], ['#D9467A', 'Pink']];
+  const MAX_RULES = 16;
+  const RULE_W = 5;
   const FORMAT_EXAMPLES = {
     json: '{"level":30,"time":1790596931482,"msg":"…"}',
     iso: '2026-09-28 12:02:11,482 INFO …',
@@ -34,8 +37,15 @@
     set(k, v) { try { localStorage.setItem('tresse.' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
   };
 
+  function loadRules() {
+    const rs = store.get('rules', []);
+    if (!Array.isArray(rs)) return [];
+    return rs.filter(r => r && typeof r.q === 'string' && r.q.trim() && /^#[0-9a-f]{6}$/i.test(r.color))
+      .slice(0, MAX_RULES).map(r => ({ q: r.q.trim(), color: r.color, on: r.on !== false }));
+  }
+
   const els = {};
-  ['search', 'search-hl', 'search-msg', 'suggest', 'btn-qhelp', 'qhelp', 'levels', 'gap', 'display-tz', 'fold', 'btn-next-err', 'braid', 'btn-unzoom', 'summary',
+  ['search', 'search-hl', 'search-msg', 'suggest', 'btn-qhelp', 'btn-rule', 'rules', 'qhelp', 'levels', 'gap', 'display-tz', 'fold', 'btn-next-err', 'braid', 'btn-unzoom', 'summary',
     'viewport', 'spacer', 'rows', 'source-list', 'src-count', 'thread-list', 'thread-filter', 'threads-count', 'journey',
     'detail', 'tab-threads', 'tab-detail', 'panel-threads', 'panel-detail', 'empty', 'work', 'format-list', 'banner',
     'add-dialog', 'add-form', 'add-name', 'add-text', 'add-tz', 'add-files', 'add-cancel', 'file-input', 'drop', 'toast',
@@ -50,6 +60,7 @@
     selected: null, anchor: null, flash: null,
     displayTz: store.get('displayTz', 'local'), gap: store.get('gap', 5000), fold: false,
     demo: false, span: [0, 0], threadFilter: '',
+    rules: loadRules(), rc: [], slots: [], hits: new Map(), ruleDraft: null, palFor: -1,
   };
   let uid = 0, colorIdx = 0, pasteN = 0;
 
@@ -172,6 +183,7 @@
 
   function applyFilters() {
     compileQuery();
+    compileRules();
     const { levels, range } = state;
     const test = state.qc && state.qc.test;
     const only = state.threadOnly && state.token ? new Set(state.tokens.get(state.token).entries) : null;
@@ -185,6 +197,7 @@
       out.push(e);
     }
     state.filtered = out;
+    matchRules();
     buildRows();
     binsKey = '';
     renderAll();
@@ -210,6 +223,7 @@
 
   function renderAll() {
     renderLevels();
+    renderRules();
     renderSummary();
     renderRows();
     drawBraid();
@@ -265,23 +279,40 @@
     return out + esc(text.slice(pos));
   }
 
+  // One bar per active color rule, always in the same slot, so a line matching several rules shows all their colors.
+  function ruleMarks(mask) {
+    if (!state.slots.length) return '';
+    if (!mask) return '<span class="rmk"></span>';
+    let bars = '', names = [];
+    state.slots.forEach((c, k) => {
+      if (!(mask & 1 << k)) return;
+      bars += `<i style="left:${3 + k * RULE_W}px;background:${c.rule.color}"></i>`;
+      names.push(c.rule.q);
+    });
+    return `<span class="rmk" title="${esc(names.join('\n'))}">${bars}</span>`;
+  }
+
   function rowHtml(r, i) {
     const top = i * RH;
-    if (r.k === 'd') return `<div class="row day" style="top:${top}px"><span class="meta"><span class="gut"></span><span class="label">${esc(dayLabel(r.t))} · ${zoneLabel(r.t)}</span></span></div>`;
-    if (r.k === 'g') return `<div class="row gap" style="top:${top}px"><span class="meta"><span class="gut"></span><span class="label">${dur(r.dt)} without activity</span></span></div>`;
+    const rmk = ruleMarks(r.e ? state.hits.get(r.e) : 0);
+    if (r.k === 'd') return `<div class="row day" style="top:${top}px"><span class="meta">${rmk}<span class="gut"></span><span class="label">${esc(dayLabel(r.t))} · ${zoneLabel(r.t)}</span></span></div>`;
+    if (r.k === 'g') return `<div class="row gap" style="top:${top}px"><span class="meta">${rmk}<span class="gut"></span><span class="label">${dur(r.dt)} without activity</span></span></div>`;
     const e = r.e, s = e.src;
     const cls = ['row', 'lv-' + e.level];
+    let style = `top:${top}px;--c:${s.color}`;
+    const first = firstRule(e);
+    if (first) { cls.push('ruled'); style += `;--rc:${first.color}`; }
     if (e === state.selected) cls.push('sel');
     if (e === state.anchor) cls.push('anchor');
     if (state.token && e.ids.includes(state.token)) cls.push('hit');
     if (e === state.flash) cls.push('flash');
     if (r.k === 'c') {
       cls.push('cont');
-      return `<div class="${cls.join(' ')}" style="top:${top}px;--c:${s.color}" data-r="${i}"><span class="meta"><span class="gut"><i class="seg" style="left:${s.lane * LANE + 2}px;background:${s.color}"></i></span><span class="cells-empty"></span></span><span class="msg">${decorate(e.cont[r.i], e)}</span></div>`;
+      return `<div class="${cls.join(' ')}" style="${style}" data-r="${i}"><span class="meta">${rmk}<span class="gut"><i class="seg" style="left:${s.lane * LANE + 2}px;background:${s.color}"></i></span><span class="cells-empty"></span></span><span class="msg">${decorate(e.cont[r.i], e)}</span></div>`;
     }
     const ts = state.anchor ? relStamp(e.te - state.anchor.te) : clock(e.te);
     const dt = r.dt == null ? '' : compactDt(r.dt);
-    return `<div class="${cls.join(' ')}" style="top:${top}px;--c:${s.color}" data-r="${i}"><span class="meta"><span class="gut"><i class="dot" style="left:${s.lane * LANE}px;background:${s.color}"></i></span><span class="ts">${ts}</span><span class="dt${r.dt >= 1000 ? ' slow' : ''}">${dt}</span><span class="src-tag">${esc(s.name)}</span><span class="lv">${LV_SHORT[e.level]}</span></span><span class="msg">${decorate(e.line, e)}</span></div>`;
+    return `<div class="${cls.join(' ')}" style="${style}" data-r="${i}"><span class="meta">${rmk}<span class="gut"><i class="dot" style="left:${s.lane * LANE}px;background:${s.color}"></i></span><span class="ts">${ts}</span><span class="dt${r.dt >= 1000 ? ' slow' : ''}">${dt}</span><span class="src-tag">${esc(s.name)}</span><span class="lv">${LV_SHORT[e.level]}</span></span><span class="msg">${decorate(e.line, e)}</span></div>`;
   }
 
   function renderRows() {
@@ -375,19 +406,26 @@
   }
 
   function computeBins(vis, a, b, nb) {
-    const key = [state.filtered.length, a, b, nb, vis.map(s => s.id + ':' + s.offset).join(',')].join('|');
+    const key = [state.filtered.length, a, b, nb, vis.map(s => s.id + ':' + s.offset).join(','), state.slots.length].join('|');
     if (key === binsKey && bins) return bins;
     const counts = vis.map(() => new Float32Array(nb));
     const errs = vis.map(() => new Uint8Array(nb));
+    // Per bin, the first color rule matched by one of its entries (-1: none).
+    const rules = state.slots.length ? vis.map(() => new Int8Array(nb).fill(-1)) : null;
     const span = b - a;
     for (const e of state.filtered) {
       if (e.te < a || e.te > b) continue;
       const bi = Math.min(nb - 1, Math.floor((e.te - a) / span * nb));
       counts[e.src.lane][bi]++;
       if (e.level === 'error') errs[e.src.lane][bi] = 1;
+      const m = rules && state.hits.get(e);
+      if (m) {
+        const k = 31 - Math.clz32(m & -m), cur = rules[e.src.lane][bi];
+        if (cur < 0 || k < cur) rules[e.src.lane][bi] = k;
+      }
     }
     binsKey = key;
-    bins = { counts, errs, max: counts.map(c => c.reduce((m, v) => Math.max(m, v), 0)) };
+    bins = { counts, errs, rules, max: counts.map(c => c.reduce((m, v) => Math.max(m, v), 0)) };
     return bins;
   }
 
@@ -458,6 +496,12 @@
       g.fillStyle = ERR;
       const er = B.errs[li];
       for (let i = 0; i < nb; i++) if (er[i]) g.fillRect(L + i * bw - 0.5, y + BRAID.lane - 4, Math.max(2, bw), 3);
+      const ru = B.rules && B.rules[li];
+      if (ru) for (let i = 0; i < nb; i++) {
+        if (ru[i] < 0) continue;
+        g.fillStyle = state.slots[ru[i]].rule.color;
+        g.fillRect(L + i * bw - 0.5, y + 1, Math.max(2, bw), 3);
+      }
       g.textAlign = 'left';
       g.fillStyle = MUTED;
       let name = s.name;
@@ -685,8 +729,10 @@
     let actions = `<button type="button" class="btn small" data-act="anchor">${a === e ? 'Clear T0' : 'Set as T0'}</button>`;
     if (a && a !== e && a.src !== e.src) actions += `<button type="button" class="btn small" data-act="align" title="Shifts the whole “${esc(s.name)}” source so that this line falls on T0">Align “${esc(s.name)}” to T0</button>`;
     actions += `<button type="button" class="btn small ghost" data-act="copy">Copy</button>`;
+    const mask = state.hits.get(e) || 0;
+    const rtags = state.slots.filter((c, k) => mask & 1 << k).map(c => `<span class="rtag" style="--rc:${c.rule.color}" title="Matches this color rule">${esc(c.rule.q)}</span>`).join('');
     els.detail.innerHTML = `<div class="detail">
-      <div class="d-head"><span class="tag" style="--c:${s.color}">${esc(s.name)}</span><span class="lvb lv-${e.level}">${LV_SHORT[e.level]}</span></div>
+      <div class="d-head"><span class="tag" style="--c:${s.color}">${esc(s.name)}</span><span class="lvb lv-${e.level}">${LV_SHORT[e.level]}</span>${rtags}</div>
       <dl>${dl}</dl>
       <pre class="d-text">${esc(text)}</pre>
       ${ids ? `<div><p class="muted small">Detected identifiers</p><div class="d-ids">${ids}</div></div>` : ''}
@@ -720,7 +766,7 @@
 
   function setAnchor(e) {
     state.anchor = e;
-    if (/\bt0:/i.test(state.query)) { applyFilters(); return; }
+    if ([state.query].concat(state.rules.map(r => r.q)).some(q => /\bt0:/i.test(q))) { applyFilters(); return; }
     renderSummary(); renderRows(); renderDetail(); drawBraid();
   }
 
@@ -912,20 +958,20 @@
     return known.get(k);
   }
 
+  function queryCtx() {
+    return { utc: state.displayTz === 'utc', anchor: state.anchor, sources: state.sources, shared: state.sharedSet, hasField };
+  }
+
   function compileQuery() {
-    state.qc = state.query
-      ? Q.compile(state.query, { utc: state.displayTz === 'utc', anchor: state.anchor, sources: state.sources, shared: state.sharedSet, hasField })
-      : null;
+    state.qc = state.query ? Q.compile(state.query, queryCtx()) : null;
     paintQuery();
   }
 
-  // Colors the query in place: an overlay behind the input's transparent text.
-  function paintQuery() {
-    const v = els.search.value;
+  // Syntax-highlighted HTML for a query, with the [start, end) spans in `bad` underlined.
+  function queryHtml(v, bad) {
     const cls = new Array(v.length).fill('');
     for (const [a, b, c] of Q.parse(v).spans) for (let i = a; i < b; i++) cls[i] = c;
-    const qc = state.qc && state.query === v.trim() ? state.qc : null;
-    if (qc) for (const [a, b] of qc.bad) for (let i = a; i < b; i++) cls[i] += ' q-bad';
+    for (const [a, b] of bad || []) for (let i = a; i < b; i++) cls[i] += ' q-bad';
     let h = '';
     for (let i = 0; i < v.length;) {
       let j = i + 1;
@@ -933,7 +979,15 @@
       h += cls[i] ? `<span class="${cls[i]}">${esc(v.slice(i, j))}</span>` : esc(v.slice(i, j));
       i = j;
     }
-    els.searchHl.innerHTML = h + ' ';
+    return h;
+  }
+
+  // Colors the query in place: an overlay behind the input's transparent text.
+  function paintQuery() {
+    const v = els.search.value;
+    const qc = state.qc && state.query === v.trim() ? state.qc : null;
+    els.searchHl.innerHTML = queryHtml(v, qc && qc.bad) + ' ';
+    els.btnRule.disabled = !v.trim();
     els.searchHl.scrollLeft = els.search.scrollLeft;
     const msgs = qc ? qc.errors.concat(qc.notes) : [];
     els.searchMsg.hidden = !msgs.length;
@@ -975,6 +1029,136 @@
     const v = (cur.split(` ${opposite} `).join(' ').trim() + ' ' + term).trim();
     applyText(v);
   }
+
+  /* ---------- Color rules ---------- */
+
+  // A color rule is a query that colors the lines it matches instead of filtering them.
+  function compileRules() {
+    const ctx = queryCtx();
+    state.rc = state.rules.map(rule => {
+      const c = Q.compile(rule.q, ctx);
+      const bad = c.errors.length > 0;
+      return { rule, test: bad ? null : c.test, bad, bads: c.bad, msg: c.errors.concat(c.notes).join(' · '), n: 0 };
+    });
+  }
+
+  // Rules are tested against the lines in view; a line's matches are a bitmask over the active rules (slots).
+  function matchRules() {
+    const act = state.rc.filter(c => c.rule.on && c.test);
+    const hits = new Map();
+    if (act.length) {
+      for (const e of state.filtered) {
+        let m = 0;
+        for (let k = 0; k < act.length; k++) if (act[k].test(e)) { m |= 1 << k; act[k].n++; }
+        if (m) hits.set(e, m);
+      }
+    }
+    state.slots = act;
+    state.hits = hits;
+    els.viewport.style.setProperty('--rw', act.length ? act.length * RULE_W + 3 + 'px' : '0px');
+  }
+
+  // The first matching rule gives the line its background: rule order is priority.
+  function firstRule(e) {
+    const m = state.hits.get(e);
+    return m ? state.slots[31 - Math.clz32(m & -m)].rule : null;
+  }
+
+  function saveRules() { store.set('rules', state.rules); }
+
+  // After a change that does not affect filtering: toggle, color, removal.
+  function refreshRules() {
+    saveRules();
+    compileRules();
+    matchRules();
+    binsKey = '';
+    renderRules(); renderRows(); drawBraid(); renderDetail();
+  }
+
+  function renderRules() {
+    const rc = state.rc;
+    els.rules.hidden = !rc.length;
+    if (!rc.length) { els.rules.innerHTML = ''; return; }
+    els.rules.innerHTML = '<span class="rules-lbl">Colors</span>' + rc.map((c, i) => {
+      const r = c.rule;
+      const title = c.bad ? c.msg : `${r.on ? 'Turn off' : 'Turn on'}${c.msg ? ` · ${c.msg}` : ''}`;
+      const n = !r.on ? '' : c.bad
+        ? '<span class="r-n bad" aria-hidden="true">!</span>'
+        : `<button type="button" class="r-n" data-act="next" title="Next matching line (Shift+click: previous)" aria-label="Next line matching ${esc(r.q)}">${nf(c.n)}</button>`;
+      const pal = state.palFor === i ? `<div class="r-pal" role="group" aria-label="Rule color">${RULE_COLORS.map(([hex, name]) =>
+        `<button type="button" data-act="pick" data-c="${hex}" style="--rc:${hex}" aria-label="${name}" title="${name}" aria-pressed="${hex === r.color}"></button>`).join('')}</div>` : '';
+      return `<span class="rule${r.on ? '' : ' off'}${c.bad ? ' bad' : ''}" data-i="${i}" style="--rc:${r.color}">`
+        + `<button type="button" class="r-sw" data-act="color" title="Change color" aria-label="Change the color of ${esc(r.q)}" aria-expanded="${state.palFor === i}"></button>`
+        + `<button type="button" class="r-q" data-act="toggle" aria-pressed="${r.on}" title="${esc(title)}">${queryHtml(r.q, c.bads)}</button>`
+        + n
+        + `<button type="button" class="r-x" data-act="edit" title="Back to the search box, to edit it or filter with it" aria-label="Edit ${esc(r.q)}">✎</button>`
+        + `<button type="button" class="r-x" data-act="del" title="Remove this rule" aria-label="Remove ${esc(r.q)}">×</button>`
+        + pal + '</span>';
+    }).join('');
+  }
+
+  // Turns the query in the search box into a color rule, and stops filtering with it.
+  function queryToRule() {
+    const q = els.search.value.trim();
+    if (!q) { toast('Type a query first, then turn it into a color.'); return; }
+    const c = Q.compile(q, queryCtx());
+    if (c.errors.length) { toast(`Fix the query first: ${c.errors[0]}.`); return; }
+    if (!c.test) { toast('This query matches every line: nothing to color.'); return; }
+    const same = state.rules.find(r => r.q === q);
+    if (same) same.on = true;
+    else {
+      if (state.rules.length >= MAX_RULES) { toast(`At most ${MAX_RULES} color rules.`); return; }
+      const d = state.ruleDraft;
+      const used = new Set(state.rules.map(r => r.color));
+      const color = d ? d.color : (RULE_COLORS.find(([hex]) => !used.has(hex)) || RULE_COLORS[state.rules.length % RULE_COLORS.length])[0];
+      state.rules.splice(d ? Math.min(d.at, state.rules.length) : state.rules.length, 0, { q, color, on: true });
+    }
+    state.ruleDraft = null;
+    saveRules();
+    remember(q);
+    closeSuggest();
+    els.search.value = '';
+    paintQuery();
+    setQuery('', true);
+    if (same) toast('This query already had a color.');
+  }
+
+  function nextMatch(i, dir) {
+    const k = state.slots.indexOf(state.rc[i]);
+    if (k < 0) return;
+    const bit = 1 << k;
+    if (!nextWhere(e => state.hits.get(e) & bit, dir, true)) toast('No line in view matches this rule.');
+  }
+
+  els.btnRule.addEventListener('click', queryToRule);
+
+  els.rules.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-act]');
+    const chip = b && b.closest('.rule');
+    if (!chip) return;
+    const i = +chip.dataset.i, r = state.rules[i];
+    const act = b.dataset.act;
+    if (act === 'color') { state.palFor = state.palFor === i ? -1 : i; renderRules(); return; }
+    state.palFor = -1;
+    if (act === 'pick') { r.color = b.dataset.c; refreshRules(); }
+    else if (act === 'toggle') { r.on = !r.on; refreshRules(); }
+    else if (act === 'next') nextMatch(i, ev.shiftKey ? -1 : 1);
+    else if (act === 'del') { state.rules.splice(i, 1); refreshRules(); }
+    else if (act === 'edit') {
+      const cur = els.search.value.trim();
+      if (cur) remember(cur);
+      state.ruleDraft = { color: r.color, at: i };
+      state.rules.splice(i, 1);
+      saveRules();
+      applyText(r.q);
+      els.search.focus();
+      toast('The rule is back in the search box and filters the log. Press Shift+Enter or “Color” to make it a color again.');
+    }
+  });
+
+  document.addEventListener('mousedown', ev => {
+    if (state.palFor >= 0 && !ev.target.closest('.rule')) { state.palFor = -1; renderRules(); }
+  });
 
   /* ---------- Suggestions ---------- */
 
@@ -1127,6 +1311,9 @@
     } else if (ev.key === 'Tab' && !ev.shiftKey && open) {
       ev.preventDefault();
       acceptSuggest(Math.max(0, sug.active));
+    } else if (ev.key === 'Enter' && ev.shiftKey) {
+      ev.preventDefault();
+      queryToRule();
     } else if (ev.key === 'Enter') {
       ev.preventDefault();
       if (open && sug.active >= 0) acceptSuggest(sug.active);
@@ -1191,15 +1378,25 @@
     else if (k === 'anchor') setAnchor(null);
   });
 
-  function nextError(dir) {
-    const rows = state.rows;
+  // Selects the next entry (dir 1) or the previous one (dir −1) satisfying `pred`, from the selection or the top of
+  // the view. With `wrap`, continues from the other end. Returns false if nothing matches.
+  function nextWhere(pred, dir, wrap) {
+    const rows = state.rows, n = rows.length;
     const vp = els.viewport;
-    let i = state.selected && state.rowOf.has(state.selected) ? state.rowOf.get(state.selected) : Math.floor(vp.scrollTop / RH) + (dir > 0 ? 0 : 1);
-    for (i += dir; i >= 0 && i < rows.length; i += dir) {
+    const start = state.selected && state.rowOf.has(state.selected) ? state.rowOf.get(state.selected) : Math.floor(vp.scrollTop / RH) + (dir > 0 ? 0 : 1);
+    for (let k = 1, i = start + dir; k <= n; k++, i += dir) {
+      if (i < 0 || i >= n) {
+        if (!wrap) return false;
+        i = (i + n) % n;
+      }
       const r = rows[i];
-      if (r.k === 'e' && r.e.level === 'error') { select(r.e); scrollToRow(i, r.e); return; }
+      if (r.k === 'e' && pred(r.e)) { select(r.e); scrollToRow(i, r.e); return true; }
     }
-    toast(dir > 0 ? 'No more errors below.' : 'No more errors above.');
+    return false;
+  }
+
+  function nextError(dir) {
+    if (!nextWhere(e => e.level === 'error', dir, false)) toast(dir > 0 ? 'No more errors below.' : 'No more errors above.');
   }
   els.btnNextErr.addEventListener('click', () => nextError(1));
 
@@ -1240,7 +1437,7 @@
     const t = ev.target;
     if (els.addDialog.open) return;
     if (t.closest && t.closest('input, textarea, select')) {
-      if (ev.key === 'Escape' && t === els.search && els.search.value) { els.search.value = ''; paintQuery(); setQuery('', true); }
+      if (ev.key === 'Escape' && t === els.search && els.search.value) { els.search.value = ''; state.ruleDraft = null; paintQuery(); setQuery('', true); }
       return;
     }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
@@ -1252,7 +1449,8 @@
     else if (ev.key === 'ArrowUp' || ev.key === 'k') { ev.preventDefault(); moveSel(-1); }
     else if (ev.key === 't' && state.selected) setAnchor(state.anchor === state.selected ? null : state.selected);
     else if (ev.key === 'Escape') {
-      if (!els.qhelp.hidden) showHelp(false);
+      if (state.palFor >= 0) { state.palFor = -1; renderRules(); }
+      else if (!els.qhelp.hidden) showHelp(false);
       else if (state.token) clearToken();
       else if (state.range) { state.range = null; applyFilters(); }
       else if (state.selected) { state.selected = null; renderRows(); renderDetail(); }

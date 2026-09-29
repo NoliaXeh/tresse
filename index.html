@@ -61,6 +61,7 @@
               <input id="search" type="text" placeholder="Search or query: level:>=warn source:api &quot;lock timeout&quot;" aria-label="Search or query the logs"
                 role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off" spellcheck="false">
             </div>
+            <button id="btn-rule" class="q-rule-btn" type="button" disabled title="Color the lines matching this query instead of filtering them (Shift+Enter)"><span class="q-rule-ico" aria-hidden="true"></span>Color</button>
             <button id="btn-qhelp" class="q-help-btn" type="button" aria-expanded="false" aria-controls="qhelp" title="Query syntax (?)">?</button>
           </div>
           <p id="search-msg" class="search-msg" role="status" hidden></p>
@@ -89,9 +90,13 @@
               <button type="button" data-q="app:accounting-export">app:accounting-export</button>
               <button type="button" data-q="source:worker depth:>=5">source:worker depth:>=5</button>
             </div>
+            <p class="qhelp-h">Color rules</p>
+            <p><kbd>Shift</kbd>+<kbd>Enter</kbd> or <b>Color</b> turns the query into a color rule: instead of hiding the other lines, it colors the ones it matches.
+              A line matching several rules shows one bar per rule on its left, and takes the background of the first one. Click a rule to turn it off, its count to jump to the next match, <b>✎</b> to edit it.</p>
             <p class="qhelp-foot"><kbd>Tab</kbd> or <kbd>↓</kbd> for suggestions, <kbd>Enter</kbd> to apply. In a line's details, <b>+</b> and <b>−</b> add a field to the query.</p>
           </div>
         </div>
+        <div id="rules" class="rules" role="group" aria-label="Color rules" hidden></div>
         <div id="levels" class="levels" role="group" aria-label="Levels"></div>
         <div class="tools">
           <label class="mini">Gaps

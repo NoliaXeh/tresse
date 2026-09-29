@@ -23,6 +23,8 @@ what you have at hand: files, or text copied from a terminal.
   range, click it to jump there.
 - **Queries**: free text, `"phrases"`, `/regex/`, fields (`status:>=500`, `source:api,worker`, `level:>=warn`),
   ranges, wildcards, time windows and `AND` / `OR` / `NOT`, with syntax highlighting and autocomplete (see below).
+- **Color rules**: turn a query into a color instead of a filter, e.g. `client_id:86` in green and `"disconnected"`
+  in red, to keep the context around the lines you care about.
 - Multi-line entries (stack traces) attached to their entry, activity gaps flagged, level filters,
   time relative to T0, copy or download of the merged view.
 - Virtualized list: several hundred thousand lines stay smooth.
@@ -73,11 +75,27 @@ lines (`ip`, `method`, `path`, `status`, `bytes`, `ua`). A field that does not a
 plain text, so `LOG:` or `https://…` still work. In a line's details, `+` and `−` next to each field add it to the
 query. Recent queries are offered when the box is empty.
 
+## Color rules
+
+A query can color lines instead of filtering them. Type it in the search box, then press `Shift+Enter` or click
+**Color**: the query leaves the search box and becomes a rule, shown under it with a color taken from the palette.
+Each rule colors the lines it matches in the list, and the bins that contain them in the braid.
+
+A line can match several rules. Each rule has its own slot, a thin bar on the left of the lines, so a line matching two
+rules shows two bars, and a column of bars follows each rule down the list. The line's background comes from the first
+rule it matches, so rule order sets priority. The details panel lists every rule the selected line matches.
+
+On a rule: the dot picks its color, clicking the query turns it off or back on, the count (matching lines in view)
+jumps to the next match (`Shift+click`: previous), `✎` puts it back in the search box to edit it or filter with it
+(it keeps its color and position when you make it a color again), and `×` removes it. Rules work alongside the
+filters and are saved in the browser.
+
 ## Shortcuts
 
 | Key | Action |
 | --- | --- |
 | `/` | Search |
+| `Shift+Enter` in the search box | Turn the query into a color rule |
 | `?` | Query syntax |
 | `↑` `↓` or `j` `k` | Previous / next line |
 | `n` / `Shift+n` | Next / previous error |

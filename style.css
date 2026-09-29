@@ -308,6 +308,84 @@ kbd {
   cursor: pointer;
 }
 .q-help-btn:hover, .q-help-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+.q-rule-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.q-rule-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--faint); }
+.q-rule-btn:disabled { cursor: default; opacity: .5; }
+.q-rule-ico { display: inline-flex; gap: 2px; }
+.q-rule-ico::before, .q-rule-ico::after { content: ""; width: 3px; height: 12px; border-radius: 1px; background: #1FAE7E; }
+.q-rule-ico::after { background: #E5484D; }
+
+/* ---------- Color rules ---------- */
+.rules { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 100%; min-width: 0; }
+.rules-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+.rule {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--rc) 55%, var(--line));
+  background: color-mix(in srgb, var(--rc) 12%, var(--surface));
+  border-radius: 999px;
+  padding: 1px 3px 1px 4px;
+  font-size: 12px;
+}
+.rule.off { background: var(--surface); border-color: var(--line); border-style: dashed; }
+.rule.off .r-q { opacity: .5; text-decoration: line-through; }
+.rule.off .r-sw { opacity: .45; }
+.rule.bad { border-color: var(--err); }
+.rule button { border: 0; background: transparent; cursor: pointer; color: inherit; padding: 2px 4px; line-height: 1.2; }
+.r-sw { flex: none; width: 14px; height: 14px; border-radius: 50%; padding: 0 !important; margin-right: 2px; background: var(--rc) !important; box-shadow: 0 0 0 2px var(--surface); }
+.r-q { font: 12px var(--mono); min-width: 0; max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-n {
+  font: 600 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--rc) 70%, var(--ink)) !important;
+  border-radius: 999px;
+}
+.r-n.bad { color: var(--err) !important; padding: 0 5px; }
+.r-n:hover { background: color-mix(in srgb, var(--rc) 22%, transparent) !important; }
+.r-x { color: var(--muted) !important; font-size: 12px; border-radius: 999px; }
+.r-x:hover { color: var(--ink) !important; background: var(--hover) !important; }
+.r-pal {
+  position: absolute;
+  z-index: 16;
+  top: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  gap: 6px;
+  padding: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.r-pal button { width: 20px; height: 20px; padding: 0; border-radius: 50%; background: var(--rc); box-shadow: 0 0 0 2px var(--surface); }
+.r-pal button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink); }
+.rtag {
+  font: 11.5px var(--mono);
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  border-left: 4px solid var(--rc);
+  background: color-mix(in srgb, var(--rc) 14%, var(--surface));
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .search-msg { margin-top: 4px; font-size: 12px; color: var(--muted); }
 .search-msg.err { color: var(--err); }
 .suggest, .qhelp {
@@ -430,6 +508,7 @@ kbd {
 }
 .row:hover { --row-bg: var(--hover); }
 .row.lv-error { --row-bg: var(--err-soft); }
+.row.ruled { --row-bg: color-mix(in srgb, var(--rc) 15%, var(--surface)); }
 .row.hit { --row-bg: var(--accent-soft); }
 .row.sel { --row-bg: var(--sel); }
 .row.flash { animation: flash 1.4s ease-out; }
@@ -444,6 +523,8 @@ kbd {
   background: var(--row-bg);
   flex: none;
 }
+.rmk { position: relative; width: var(--rw, 0px); height: 100%; flex: none; }
+.rmk i { position: absolute; top: 0; bottom: 0; width: 3px; }
 .gut { position: relative; width: var(--gut, 16px); height: 100%; flex: none; margin-left: 8px; }
 .gut::before { content: ""; position: absolute; inset: 0; background: var(--lanes-bg, none); opacity: .4; }
 .dot { position: absolute; top: calc(50% - 3.5px); width: 7px; height: 7px; border-radius: 50%; }
